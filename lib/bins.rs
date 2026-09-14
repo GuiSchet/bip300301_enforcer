@@ -78,7 +78,13 @@ pub struct BitcoinCli {
 
 impl BitcoinCli {
     fn default_args(&self) -> Vec<String> {
+        // The enforcer supplies every RPC and network setting explicitly. Do
+        // not also inherit bitcoin.conf from the account running it: an
+        // ambient `signet=1`, RPC credential, or wallet setting can otherwise
+        // override the selected node and make the invocation non-hermetic.
+        let null_config = if cfg!(windows) { "NUL" } else { "/dev/null" };
         let mut res = vec![
+            format!("-conf={null_config}"),
             format!("-chain={}", self.network.to_core_arg()),
             format!("-rpcport={}", self.rpc_port),
             format!("-rpcconnect={}", self.rpc_host),
