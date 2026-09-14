@@ -230,11 +230,22 @@ async fn run_enforcer_until_exit(setup: &PreSetup, bitcoind: &Bitcoind) -> anyho
 /// chainparams entry.
 async fn assumeutxo_snapshot(
     setup: &PreSetup,
+    core_major: u32,
     fixture: &SnapshotFixture,
     blocks: &[&str],
 ) -> anyhow::Result<std::path::PathBuf> {
     let cache_dir = assumeutxo_fixture_path(".cache");
-    let snapshot_path = cache_dir.join(format!("utxos-{}.dat", fixture.txoutset_hash));
+    // The UTXO-set hash can stay identical across Core releases while the
+    // serialized snapshot metadata changes (Core 31 added a network id).
+    // Forks can also keep the same major and UTXO set while selecting a
+    // different regtest magic. Never reuse the binary fixture across either
+    // boundary.
+    let network_magic =
+        crate::setup::bitcoind_regtest_magic().unwrap_or_else(|| "standard".to_owned());
+    let snapshot_path = cache_dir.join(format!(
+        "utxos-v{core_major}-{network_magic}-{}.dat",
+        fixture.txoutset_hash
+    ));
     if snapshot_path.exists() {
         tracing::info!("Using cached UTXO snapshot: {}", snapshot_path.display());
         return Ok(snapshot_path);
@@ -409,7 +420,8 @@ pub async fn test_assumeutxo_node(setup: PreSetup) -> anyhow::Result<()> {
     // The fixture chain must match the node's regtest assumeutxo chainparams
     // entry, which differs between Core major versions
     // (see scripts/generate_assumeutxo_fixture.py).
-    let fixture = load_snapshot_fixture(node_major_version(&bitcoin_cli).await?)?;
+    let core_major = node_major_version(&bitcoin_cli).await?;
+    let fixture = load_snapshot_fixture(core_major)?;
 
     // Give the node the fixture chain's headers only: this is the state of a
     // node that header-synced from the network but has no block data yet.
@@ -428,7 +440,7 @@ pub async fn test_assumeutxo_node(setup: PreSetup) -> anyhow::Result<()> {
     }
 
     tracing::info!("Loading UTXO snapshot");
-    let utxos_dat = assumeutxo_snapshot(&setup, &fixture, &blocks).await?;
+    let utxos_dat = assumeutxo_snapshot(&setup, core_major, &fixture, &blocks).await?;
     let loaded: serde_json::Value = serde_json::from_str(
         &bitcoin_cli
             .command::<String, _, _, _, _>(
@@ -605,7 +617,8 @@ pub async fn test_assumeutxo_enforcer_above_snapshot_base(setup: PreSetup) -> an
     let (full_node, full_node_task, full_node_cli) = spawn_bitcoind(&setup, &[], res_tx)?;
     let () = wait_for_bitcoind_ready(&full_node_cli).await?;
 
-    let fixture = load_snapshot_fixture(node_major_version(&full_node_cli).await?)?;
+    let core_major = node_major_version(&full_node_cli).await?;
+    let fixture = load_snapshot_fixture(core_major)?;
     let blocks_hex = std::fs::read_to_string(assumeutxo_fixture_path(&fixture.blocks))?;
     let base_blocks: Vec<&str> = blocks_hex.lines().collect();
     let () = submit_blocks(&full_node_cli, &base_blocks).await?;
@@ -650,7 +663,7 @@ pub async fn test_assumeutxo_enforcer_above_snapshot_base(setup: PreSetup) -> an
 
     let above_base = read_blocks(&full_node_cli, fixture.base_height + 1, new_tip_height).await?;
     let above_base: Vec<&str> = above_base.iter().map(String::as_str).collect();
-    let snapshot = assumeutxo_snapshot(&setup, &fixture, &base_blocks).await?;
+    let snapshot = assumeutxo_snapshot(&setup, core_major, &fixture, &base_blocks).await?;
 
     // ---- phase 2: replace the node with one that is background-validating ----
     drop(full_node_task);

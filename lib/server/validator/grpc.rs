@@ -1,4 +1,7 @@
-use bitcoin::{Amount, BlockHash, Transaction, TxOut, absolute::Height, hashes::Hash};
+use bitcoin::{
+    Amount, Block, BlockHash, Transaction, TxOut, absolute::Height, amount::CheckedSum,
+    hashes::Hash,
+};
 use buffa::MessageField;
 use connectrpc::{ConnectError, RequestContext, Response, ServiceRequest, ServiceResult};
 use futures::{StreamExt as _, stream::BoxStream};
@@ -6,31 +9,456 @@ use miette::IntoDiagnostic as _;
 
 use crate::{
     convert,
-    messages::{CoinbaseMessage, M1ProposeSidechain, M2AckSidechain, M3ProposeBundle},
+    messages::{
+        CoinbaseMessage, M1ProposeSidechain, M2AckSidechain, M3ProposeBundle, M4AckBundles,
+        parse_m8_tx,
+    },
     proto::{
         ToStatus as _,
-        common::{ConsensusHex, ReverseHex},
+        common::{ConsensusHex, Hex, ReverseHex},
         mainchain::{
-            GetBlockHeaderInfoRequest, GetBlockHeaderInfoResponse, GetBlockInfoRequest,
-            GetBlockInfoResponse, GetBmmHStarCommitmentRequest, GetBmmHStarCommitmentResponse,
-            GetChainInfoRequest, GetChainInfoResponse, GetChainTipRequest, GetChainTipResponse,
-            GetCoinbasePSBTRequest, GetCoinbasePSBTResponse, GetCtipRequest, GetCtipResponse,
-            GetSidechainProposalsRequest, GetSidechainProposalsResponse, GetSidechainsRequest,
-            GetSidechainsResponse, GetTwoWayPegDataRequest, GetTwoWayPegDataResponse,
-            GetWithdrawalBundleProposalsRequest, GetWithdrawalBundleProposalsResponse, Network,
-            StopRequest, StopResponse, SubscribeEventsRequest, SubscribeEventsResponse,
-            SubscribeHeaderSyncProgressRequest, SubscribeHeaderSyncProgressResponse,
-            get_block_info_response, get_bmm_h_star_commitment_response,
-            get_chain_info_response::Bip300Constants, get_ctip_response::Ctip,
-            get_sidechain_proposals_response::SidechainProposal,
+            Bip300BlockDelta, Bip300CoinbaseMessage, ConfirmedBmmRequest,
+            GetBip300BlockDeltaRequest, GetBip300BlockDeltaResponse, GetBlockHeaderInfoRequest,
+            GetBlockHeaderInfoResponse, GetBlockInfoRequest, GetBlockInfoResponse,
+            GetBmmHStarCommitmentRequest, GetBmmHStarCommitmentResponse, GetChainInfoRequest,
+            GetChainInfoResponse, GetChainTipRequest, GetChainTipResponse, GetCoinbasePSBTRequest,
+            GetCoinbasePSBTResponse, GetCtipRequest, GetCtipResponse, GetSidechainProposalsRequest,
+            GetSidechainProposalsResponse, GetSidechainsRequest, GetSidechainsResponse,
+            GetTwoWayPegDataRequest, GetTwoWayPegDataResponse, GetWithdrawalBundleProposalsRequest,
+            GetWithdrawalBundleProposalsResponse, M1Delta, M2Delta, M3Delta, M4Delta, M7Delta,
+            Network, StopRequest, StopResponse, SubscribeEventsRequest, SubscribeEventsResponse,
+            SubscribeHeaderSyncProgressRequest, SubscribeHeaderSyncProgressResponse, TreasuryCtip,
+            TreasuryTransition, bip300coinbase_message, get_block_info_response,
+            get_bmm_h_star_commitment_response, get_chain_info_response::Bip300Constants,
+            get_ctip_response::Ctip, get_sidechain_proposals_response::SidechainProposal,
             get_sidechains_response::SidechainInfo, get_withdrawal_bundle_proposals_response,
+            m2delta, m4delta, treasury_transition,
         },
         mainchain_service::ValidatorService,
         wrap_u32,
     },
     server::{internal_err, missing_field, parse_sidechain_id, validator::Server},
-    types::Thresholds,
+    types::{
+        BlockEvent, BlockInfo as ValidatorBlockInfo, Ctip as ValidatorCtip, HeaderInfo, M6id,
+        SidechainNumber, Thresholds, TreasuryUtxo, WithdrawalBundleEventKind,
+    },
+    validator::{
+        BlockAckBundleAction, BlockAckSidechainProposalEffect, BlockCoinbaseMsg, BlockDiff, BlockTx,
+    },
 };
+
+const MAX_BIP300_BLOCK_DELTA_ANCESTORS: u32 = 4_095;
+
+fn treasury_ctip(ctip: &ValidatorCtip) -> TreasuryCtip {
+    TreasuryCtip {
+        txid: MessageField::some(ReverseHex::encode(&ctip.outpoint.txid)),
+        vout: ctip.outpoint.vout,
+        value_sats: ctip.value.to_sat(),
+    }
+}
+
+fn historical_treasury_ctip(treasury: &TreasuryUtxo) -> TreasuryCtip {
+    TreasuryCtip {
+        txid: MessageField::some(ReverseHex::encode(&treasury.outpoint.txid)),
+        vout: treasury.outpoint.vout,
+        value_sats: treasury.total_value.to_sat(),
+    }
+}
+
+fn m4_effects(block_diff: &BlockDiff) -> Vec<m4delta::Effect> {
+    let Some(acks) = block_diff.coinbase.msgs.iter().find_map(|msg| match msg {
+        BlockCoinbaseMsg::AckBundles(acks) => Some(acks),
+        _ => None,
+    }) else {
+        return Vec::new();
+    };
+    let mut effects = acks
+        .0
+        .iter()
+        .map(|(sidechain_number, action)| match action {
+            BlockAckBundleAction::Alarm {
+                positive_votes_proposals,
+            } => {
+                let mut downvoted = positive_votes_proposals.iter().collect::<Vec<_>>();
+                downvoted.sort_by_key(|m6id| m6id.0.to_byte_array());
+                let downvoted_m6ids = downvoted
+                    .into_iter()
+                    .map(|m6id| ConsensusHex::encode(&m6id.0))
+                    .collect();
+                m4delta::Effect {
+                    sidechain_number: sidechain_number.0.into(),
+                    action: m4delta::effect::Action::Alarm.into(),
+                    upvoted_m6id: MessageField::none(),
+                    downvoted_m6ids,
+                }
+            }
+            BlockAckBundleAction::Upvote {
+                m6id,
+                downvoted_others,
+            } => m4delta::Effect {
+                sidechain_number: sidechain_number.0.into(),
+                action: m4delta::effect::Action::Upvote.into(),
+                upvoted_m6id: MessageField::some(ConsensusHex::encode(&m6id.0)),
+                downvoted_m6ids: downvoted_others
+                    .iter()
+                    .map(|m6id| ConsensusHex::encode(&m6id.0))
+                    .collect(),
+            },
+        })
+        .collect::<Vec<_>>();
+    effects.sort_by_key(|effect| effect.sidechain_number);
+    effects
+}
+
+fn coinbase_messages(
+    block: &Block,
+    block_info: &ValidatorBlockInfo,
+    block_diff: &BlockDiff,
+) -> Vec<Bip300CoinbaseMessage> {
+    let Some(coinbase) = block.txdata.first() else {
+        return Vec::new();
+    };
+    coinbase
+        .output
+        .iter()
+        .enumerate()
+        .filter_map(|(vout, output)| {
+            let (rest, message) = CoinbaseMessage::parse(&output.script_pubkey).ok()?;
+            if !rest.is_empty() {
+                return None;
+            }
+            let (accepted, message) = match message {
+                CoinbaseMessage::M1ProposeSidechain(m1) => {
+                    let proposal_id = crate::types::SidechainProposalId {
+                        sidechain_number: m1.sidechain_number,
+                        description_hash: m1.description.sha256d_hash(),
+                    };
+                    let accepted = block_info.sidechain_proposals().any(|(proposal_vout, p)| {
+                        proposal_vout == vout as u32 && p.compute_id() == proposal_id
+                    });
+                    let delta = M1Delta {
+                        sidechain_number: m1.sidechain_number.0.into(),
+                        description: MessageField::some(ConsensusHex::encode(&m1.description.0)),
+                        description_sha256d_hash: MessageField::some(ReverseHex::encode(
+                            &proposal_id.description_hash,
+                        )),
+                    };
+                    (accepted, bip300coinbase_message::Message::from(delta))
+                }
+                CoinbaseMessage::M2AckSidechain(m2) => {
+                    let proposal_id = crate::types::SidechainProposalId {
+                        sidechain_number: m2.sidechain_number,
+                        description_hash: m2.description_hash,
+                    };
+                    let effect = block_diff.coinbase.msgs.iter().find_map(|msg| match msg {
+                        BlockCoinbaseMsg::AckSidechainProposal(ack) if ack.id == proposal_id => {
+                            Some(match ack.effect {
+                                BlockAckSidechainProposalEffect::NoActivation => {
+                                    m2delta::Effect::NoActivation
+                                }
+                                BlockAckSidechainProposalEffect::SlotActivation => {
+                                    m2delta::Effect::SlotActivation
+                                }
+                                BlockAckSidechainProposalEffect::ReplaceActive(_) => {
+                                    m2delta::Effect::ReplaceActive
+                                }
+                            })
+                        }
+                        _ => None,
+                    });
+                    let accepted = effect.is_some();
+                    let delta = M2Delta {
+                        sidechain_number: m2.sidechain_number.0.into(),
+                        description_sha256d_hash: MessageField::some(ReverseHex::encode(
+                            &m2.description_hash,
+                        )),
+                        effect: effect.unwrap_or(m2delta::Effect::RejectedOrNoop).into(),
+                    };
+                    (accepted, bip300coinbase_message::Message::from(delta))
+                }
+                CoinbaseMessage::M3ProposeBundle(m3) => {
+                    let m6id = M6id::from(m3.bundle_txid);
+                    let accepted = block_diff.coinbase.msgs.iter().any(|msg| {
+                        matches!(msg, BlockCoinbaseMsg::ProposeBundle(proposal)
+                            if proposal.sidechain_number == m3.sidechain_number
+                                && proposal.m6id == m6id)
+                    });
+                    let delta = M3Delta {
+                        sidechain_number: m3.sidechain_number.0.into(),
+                        m6id: MessageField::some(ConsensusHex::encode(&m6id.0)),
+                    };
+                    (accepted, bip300coinbase_message::Message::from(delta))
+                }
+                CoinbaseMessage::M4AckBundles(m4) => {
+                    let (mode, raw_votes) = match m4 {
+                        M4AckBundles::RepeatPrevious => (m4delta::Mode::RepeatPrevious, Vec::new()),
+                        M4AckBundles::OneByte { upvotes } => (
+                            m4delta::Mode::OneByte,
+                            upvotes.into_iter().map(u32::from).collect(),
+                        ),
+                        M4AckBundles::TwoBytes { upvotes } => (
+                            m4delta::Mode::TwoBytes,
+                            upvotes.into_iter().map(u32::from).collect(),
+                        ),
+                        M4AckBundles::LeadingBy50 => (m4delta::Mode::LeadingBy50, Vec::new()),
+                    };
+                    let delta = M4Delta {
+                        mode: mode.into(),
+                        raw_votes,
+                        effects: m4_effects(block_diff),
+                    };
+                    (true, bip300coinbase_message::Message::from(delta))
+                }
+                CoinbaseMessage::M7BmmAccept(m7) => {
+                    let accepted = block_info.bmm_commitments.get(&m7.sidechain_number)
+                        == Some(&m7.sidechain_block_hash);
+                    let delta = M7Delta {
+                        sidechain_number: m7.sidechain_number.0.into(),
+                        hstar: MessageField::some(ConsensusHex::encode(&m7.sidechain_block_hash)),
+                    };
+                    (accepted, bip300coinbase_message::Message::from(delta))
+                }
+            };
+            Some(Bip300CoinbaseMessage {
+                vout: vout as u32,
+                raw_script_pubkey: MessageField::some(Hex::encode(
+                    &output.script_pubkey.as_bytes(),
+                )),
+                accepted,
+                message: Some(message),
+            })
+        })
+        .collect()
+}
+
+impl Server {
+    fn previous_treasury_ctip(
+        &self,
+        sidechain_number: SidechainNumber,
+        sequence_number: u64,
+    ) -> Result<Option<TreasuryCtip>, ConnectError> {
+        let Some(previous_sequence) = sequence_number.checked_sub(1) else {
+            return Ok(None);
+        };
+        let previous = self
+            .validator
+            .get_treasury_utxo(sidechain_number, previous_sequence)
+            .map_err(internal_err)?;
+        Ok(Some(historical_treasury_ctip(&previous)))
+    }
+
+    fn treasury_transitions(
+        &self,
+        header_info: &HeaderInfo,
+        block: &Block,
+        block_info: &ValidatorBlockInfo,
+        block_diff: &BlockDiff,
+    ) -> Result<Vec<TreasuryTransition>, ConnectError> {
+        let mut transitions = Vec::new();
+
+        for tx_diff in &block_diff.txs {
+            match tx_diff {
+                BlockTx::M5(m5) => {
+                    let mut ctips = m5.new_ctips.iter().collect::<Vec<_>>();
+                    ctips.sort_by_key(|(sidechain_number, _)| sidechain_number.0);
+                    for (sidechain_number, new_ctip) in ctips {
+                        let deposit = block_info.events.iter().find_map(|event| match event {
+                            BlockEvent::Deposits(deposits) => deposits
+                                .get(sidechain_number)
+                                .filter(|deposit| deposit.outpoint == new_ctip.outpoint),
+                            _ => None,
+                        });
+                        let deposit = deposit.ok_or_else(|| {
+                            ConnectError::internal(format!(
+                                "M5 diff for sidechain {sidechain_number} has no matching block event"
+                            ))
+                        })?;
+                        let transaction = block
+                            .txdata
+                            .iter()
+                            .find(|tx| tx.compute_txid() == new_ctip.outpoint.txid)
+                            .ok_or_else(|| {
+                                ConnectError::internal(format!(
+                                    "M5 diff references transaction {} outside its block",
+                                    new_ctip.outpoint.txid
+                                ))
+                            })?;
+                        transitions.push(TreasuryTransition {
+                            kind: treasury_transition::Kind::Deposit.into(),
+                            sidechain_number: sidechain_number.0.into(),
+                            previous_ctip: self
+                                .previous_treasury_ctip(*sidechain_number, deposit.sequence_number)?
+                                .map(MessageField::some)
+                                .unwrap_or_default(),
+                            new_ctip: MessageField::some(treasury_ctip(new_ctip)),
+                            sequence_number: Some(deposit.sequence_number),
+                            delta_sats: Some(deposit.value.to_sat()),
+                            payout_sats: None,
+                            fee_sats: None,
+                            m6id: MessageField::none(),
+                            sidechain_address: MessageField::some(Hex::encode(&deposit.address)),
+                            transaction: MessageField::some(ConsensusHex::encode(transaction)),
+                            proposal_height: None,
+                            terminal_height: Some(header_info.height),
+                        });
+                    }
+                }
+                BlockTx::M6(m6) => {
+                    let success = block_info.withdrawal_bundle_events().find(|event| {
+                        event.sidechain_id == m6.sidechain_number
+                            && event.m6id == m6.removed_pending_withdrawal
+                            && matches!(event.kind, WithdrawalBundleEventKind::Succeeded { .. })
+                    });
+                    let success = success.ok_or_else(|| {
+                        ConnectError::internal(format!(
+                            "M6 diff for sidechain {} has no matching success event",
+                            m6.sidechain_number
+                        ))
+                    })?;
+                    let WithdrawalBundleEventKind::Succeeded {
+                        sequence_number,
+                        transaction,
+                    } = &success.kind
+                    else {
+                        unreachable!("filtered for successful withdrawal")
+                    };
+                    let previous_sequence = sequence_number.checked_sub(1).ok_or_else(|| {
+                        ConnectError::internal("a successful M6 cannot be treasury sequence zero")
+                    })?;
+                    let previous = self
+                        .validator
+                        .get_treasury_utxo(m6.sidechain_number, previous_sequence)
+                        .map_err(internal_err)?;
+                    let payout = transaction
+                        .output
+                        .iter()
+                        .skip(1)
+                        .map(|output| output.value)
+                        .checked_sum()
+                        .ok_or_else(|| ConnectError::internal("M6 payout amount overflow"))?;
+                    let outputs_total = m6
+                        .new_ctip
+                        .value
+                        .checked_add(payout)
+                        .ok_or_else(|| ConnectError::internal("M6 output amount overflow"))?;
+                    let fee = previous
+                        .total_value
+                        .checked_sub(outputs_total)
+                        .ok_or_else(|| {
+                            ConnectError::internal(
+                                "M6 output amount exceeds previous treasury value",
+                            )
+                        })?;
+                    transitions.push(TreasuryTransition {
+                        kind: treasury_transition::Kind::WithdrawalSucceeded.into(),
+                        sidechain_number: m6.sidechain_number.0.into(),
+                        previous_ctip: MessageField::some(historical_treasury_ctip(&previous)),
+                        new_ctip: MessageField::some(treasury_ctip(&m6.new_ctip)),
+                        sequence_number: Some(*sequence_number),
+                        delta_sats: Some(
+                            previous
+                                .total_value
+                                .checked_sub(m6.new_ctip.value)
+                                .expect("a valid M6 reduces the treasury")
+                                .to_sat(),
+                        ),
+                        payout_sats: Some(payout.to_sat()),
+                        fee_sats: Some(fee.to_sat()),
+                        m6id: MessageField::some(ConsensusHex::encode(
+                            &m6.removed_pending_withdrawal.0,
+                        )),
+                        sidechain_address: MessageField::none(),
+                        transaction: MessageField::some(ConsensusHex::encode(transaction)),
+                        proposal_height: Some(m6.removed_pending_withdrawal_info.proposal_height),
+                        terminal_height: Some(header_info.height),
+                    });
+                }
+            }
+        }
+
+        let mut failed = block_diff
+            .coinbase
+            .failed_m6ids
+            .0
+            .iter()
+            .flat_map(|(sidechain_number, failed)| {
+                failed
+                    .values()
+                    .map(move |(m6id, info)| (*sidechain_number, *m6id, *info))
+            })
+            .collect::<Vec<_>>();
+        failed.sort_by_key(|(sidechain_number, m6id, _)| {
+            (sidechain_number.0, m6id.0.to_byte_array())
+        });
+        transitions.extend(failed.into_iter().map(|(sidechain_number, m6id, info)| {
+            TreasuryTransition {
+                kind: treasury_transition::Kind::WithdrawalFailed.into(),
+                sidechain_number: sidechain_number.0.into(),
+                previous_ctip: MessageField::none(),
+                new_ctip: MessageField::none(),
+                sequence_number: None,
+                delta_sats: None,
+                payout_sats: None,
+                fee_sats: None,
+                m6id: MessageField::some(ConsensusHex::encode(&m6id.0)),
+                sidechain_address: MessageField::none(),
+                transaction: MessageField::none(),
+                proposal_height: Some(info.proposal_height),
+                terminal_height: Some(header_info.height),
+            }
+        }));
+
+        Ok(transitions)
+    }
+
+    fn confirmed_bmm_requests(
+        &self,
+        block: &Block,
+        block_info: &ValidatorBlockInfo,
+    ) -> Vec<ConfirmedBmmRequest> {
+        block
+            .txdata
+            .iter()
+            .skip(1)
+            .filter_map(|transaction| {
+                let request = parse_m8_tx(transaction)?;
+                (block_info.bmm_commitments.get(&request.sidechain_number)
+                    == Some(&request.sidechain_block_hash)
+                    && request.prev_mainchain_block_hash == block.header.prev_blockhash)
+                    .then(|| ConfirmedBmmRequest {
+                        sidechain_number: request.sidechain_number.0.into(),
+                        txid: MessageField::some(ReverseHex::encode(&transaction.compute_txid())),
+                        transaction: MessageField::some(ConsensusHex::encode(transaction)),
+                        hstar: MessageField::some(ConsensusHex::encode(
+                            &request.sidechain_block_hash,
+                        )),
+                        previous_mainchain_block_hash: MessageField::some(ReverseHex::encode(
+                            &request.prev_mainchain_block_hash,
+                        )),
+                        fee_sats: None,
+                    })
+            })
+            .collect()
+    }
+
+    fn bip300_block_delta(
+        &self,
+        header_info: HeaderInfo,
+        block: &Block,
+        block_info: &ValidatorBlockInfo,
+        block_diff: &BlockDiff,
+    ) -> Result<Bip300BlockDelta, ConnectError> {
+        let treasury_transitions =
+            self.treasury_transitions(&header_info, block, block_info, block_diff)?;
+        Ok(Bip300BlockDelta {
+            header_info: MessageField::some(header_info.into()),
+            coinbase_txid: MessageField::some(ReverseHex::encode(&block_info.coinbase_txid)),
+            coinbase_messages: coinbase_messages(block, block_info, block_diff),
+            treasury_transitions,
+            confirmed_bmm_requests: self.confirmed_bmm_requests(block, block_info),
+        })
+    }
+}
 
 /// Age of a sidechain proposal at the given mainchain tip height. A proposal
 /// retained from a previous sync can have a `proposal_height` above the active
@@ -106,6 +534,57 @@ impl ValidatorService for Server {
             },
         };
         Ok(Response::new(resp))
+    }
+
+    async fn get_bip300_block_delta(
+        &self,
+        _ctx: RequestContext,
+        request: ServiceRequest<'_, GetBip300BlockDeltaRequest>,
+    ) -> ServiceResult<GetBip300BlockDeltaResponse> {
+        let GetBip300BlockDeltaRequest {
+            block_hash,
+            max_ancestors,
+            ..
+        } = request.to_owned_message();
+        let block_hash = block_hash
+            .into_option()
+            .ok_or_else(|| missing_field::<GetBip300BlockDeltaRequest>("block_hash"))?
+            .decode_status::<GetBip300BlockDeltaRequest, _>("block_hash")?;
+        let max_ancestors = max_ancestors.unwrap_or(0);
+        if max_ancestors > MAX_BIP300_BLOCK_DELTA_ANCESTORS {
+            return Err(ConnectError::invalid_argument(format!(
+                "max_ancestors exceeds the observer RPC limit of {MAX_BIP300_BLOCK_DELTA_ANCESTORS}"
+            )));
+        }
+        let Some(infos) = self
+            .validator
+            .try_get_block_infos(&block_hash, max_ancestors as usize)
+            .map_err(internal_err)?
+        else {
+            return Ok(Response::new(GetBip300BlockDeltaResponse::default()));
+        };
+
+        let mut deltas = Vec::with_capacity(infos.len());
+        for (header_info, block_info) in infos {
+            let block = self
+                .validator
+                .get_raw_block(header_info.block_hash)
+                .await
+                .map_err(internal_err)?;
+            if block.block_hash() != header_info.block_hash {
+                return Err(ConnectError::internal(format!(
+                    "Core returned block {} for requested block {}",
+                    block.block_hash(),
+                    header_info.block_hash
+                )));
+            }
+            let block_diff = self
+                .validator
+                .get_block_diff(&header_info.block_hash)
+                .map_err(internal_err)?;
+            deltas.push(self.bip300_block_delta(header_info, &block, &block_info, &block_diff)?);
+        }
+        Ok(Response::new(GetBip300BlockDeltaResponse { deltas }))
     }
 
     async fn get_bmm_h_star_commitment(

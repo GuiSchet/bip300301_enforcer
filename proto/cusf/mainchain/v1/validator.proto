@@ -84,6 +84,11 @@ service ValidatorService {
   rpc GetBlockInfo(GetBlockInfoRequest) returns (GetBlockInfoResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // Returns a lossless observer-oriented view of the BIP300/301 messages and
+  // resolved state transitions for a block and a bounded ancestor prefix.
+  rpc GetBip300BlockDelta(GetBip300BlockDeltaRequest) returns (GetBip300BlockDeltaResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // Fetches BMM h* commitment for a specific mainchain block,
   // and optionally, it's ancestors
   rpc GetBmmHStarCommitment(GetBmmHStarCommitmentRequest) returns (GetBmmHStarCommitmentResponse) {
@@ -163,6 +168,133 @@ message GetBlockInfoResponse {
   // Empty if the requested block was not found.
   // Ancestors MUST be sorted newest-first.
   repeated Info infos = 1;
+}
+
+message GetBip300BlockDeltaRequest {
+  cusf.common.v1.ReverseHex block_hash = 1;
+  // The server accepts at most 4095 ancestors (4096 blocks including the
+  // requested block) per call. Clients should page and checkpoint coverage.
+  optional uint32 max_ancestors = 2;
+}
+
+message GetBip300BlockDeltaResponse {
+  // Newest-first, matching GetBlockInfo.
+  repeated Bip300BlockDelta deltas = 1;
+}
+
+message Bip300BlockDelta {
+  BlockHeaderInfo header_info = 1;
+  cusf.common.v1.ReverseHex coinbase_txid = 2;
+  repeated Bip300CoinbaseMessage coinbase_messages = 3;
+  repeated TreasuryTransition treasury_transitions = 4;
+  repeated ConfirmedBmmRequest confirmed_bmm_requests = 5;
+}
+
+message Bip300CoinbaseMessage {
+  uint32 vout = 1;
+  // Exact scriptPubKey bytes, including OP_RETURN and the push opcode.
+  cusf.common.v1.Hex raw_script_pubkey = 2;
+  bool accepted = 3;
+
+  oneof message {
+    M1Delta m1 = 10;
+    M2Delta m2 = 11;
+    M3Delta m3 = 12;
+    M4Delta m4 = 13;
+    M7Delta m7 = 14;
+  }
+}
+
+message M1Delta {
+  uint32 sidechain_number = 1;
+  cusf.common.v1.ConsensusHex description = 2;
+  cusf.common.v1.ReverseHex description_sha256d_hash = 3;
+}
+
+message M2Delta {
+  enum Effect {
+    EFFECT_UNSPECIFIED = 0;
+    EFFECT_NO_ACTIVATION = 1;
+    EFFECT_SLOT_ACTIVATION = 2;
+    EFFECT_REPLACE_ACTIVE = 3;
+    EFFECT_REJECTED_OR_NOOP = 4;
+  }
+  uint32 sidechain_number = 1;
+  cusf.common.v1.ReverseHex description_sha256d_hash = 2;
+  Effect effect = 3;
+}
+
+message M3Delta {
+  uint32 sidechain_number = 1;
+  cusf.common.v1.ConsensusHex m6id = 2;
+}
+
+message M4Delta {
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    MODE_REPEAT_PREVIOUS = 1;
+    MODE_ONE_BYTE = 2;
+    MODE_TWO_BYTES = 3;
+    MODE_LEADING_BY_50 = 4;
+  }
+  message Effect {
+    enum Action {
+      ACTION_UNSPECIFIED = 0;
+      ACTION_ALARM = 1;
+      ACTION_UPVOTE = 2;
+    }
+    uint32 sidechain_number = 1;
+    Action action = 2;
+    optional cusf.common.v1.ConsensusHex upvoted_m6id = 3;
+    repeated cusf.common.v1.ConsensusHex downvoted_m6ids = 4;
+  }
+  Mode mode = 1;
+  // Decoded wire values. Sentinels remain their unsigned numeric values.
+  repeated uint32 raw_votes = 2;
+  repeated Effect effects = 3;
+}
+
+message M7Delta {
+  uint32 sidechain_number = 1;
+  cusf.common.v1.ConsensusHex hstar = 2;
+}
+
+message TreasuryCtip {
+  cusf.common.v1.ReverseHex txid = 1;
+  uint32 vout = 2;
+  uint64 value_sats = 3;
+}
+
+message TreasuryTransition {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_DEPOSIT = 1;
+    KIND_WITHDRAWAL_SUCCEEDED = 2;
+    KIND_WITHDRAWAL_FAILED = 3;
+  }
+  Kind kind = 1;
+  uint32 sidechain_number = 2;
+  optional TreasuryCtip previous_ctip = 3;
+  optional TreasuryCtip new_ctip = 4;
+  optional uint64 sequence_number = 5;
+  optional uint64 delta_sats = 6;
+  optional uint64 payout_sats = 7;
+  optional uint64 fee_sats = 8;
+  optional cusf.common.v1.ConsensusHex m6id = 9;
+  optional cusf.common.v1.Hex sidechain_address = 10;
+  optional cusf.common.v1.ConsensusHex transaction = 11;
+  optional uint32 proposal_height = 12;
+  optional uint32 terminal_height = 13;
+}
+
+message ConfirmedBmmRequest {
+  uint32 sidechain_number = 1;
+  cusf.common.v1.ReverseHex txid = 2;
+  cusf.common.v1.ConsensusHex transaction = 3;
+  cusf.common.v1.ConsensusHex hstar = 4;
+  cusf.common.v1.ReverseHex previous_mainchain_block_hash = 5;
+  // Present only when the node can resolve every input amount.
+  optional uint64 fee_sats = 6;
 }
 
 message GetBmmHStarCommitmentRequest {

@@ -5,8 +5,11 @@ use std::{
 };
 
 use async_broadcast::{InactiveReceiver, Sender as BroadcastSender, broadcast};
-use bitcoin::{self, Amount, BlockHash, OutPoint, Txid};
-use bitcoin_jsonrpsee::jsonrpsee;
+use bitcoin::{self, Amount, Block, BlockHash, OutPoint, Txid};
+use bitcoin_jsonrpsee::{
+    client::{GetBlockClient as _, U8Witness},
+    jsonrpsee,
+};
 use fallible_iterator::{FallibleIterator, IteratorExt};
 use futures::{StreamExt, stream::FusedStream};
 use miette::{Diagnostic, IntoDiagnostic};
@@ -26,6 +29,10 @@ use crate::{
 
 pub mod cusf_enforcer;
 mod dbs;
+pub(crate) use dbs::diff::{
+    AckBundleAction as BlockAckBundleAction, Block as BlockDiff, CoinbaseMsg as BlockCoinbaseMsg,
+    Tx as BlockTx, ack_sidechain_proposal::Effect as BlockAckSidechainProposalEffect,
+};
 pub mod main_rest_client;
 pub mod parse_block_files;
 mod sync_state_summary;
@@ -213,6 +220,16 @@ where
     fn from(err: T) -> Self {
         Self(err.into())
     }
+}
+
+#[derive(Debug, Error)]
+pub(crate) enum GetBip300BlockDeltaError {
+    #[error(transparent)]
+    ReadTxn(#[from] env::error::ReadTxn),
+    #[error(transparent)]
+    GetDiff(#[from] db::error::Get),
+    #[error("JSON RPC getblock failed")]
+    GetBlock(#[source] jsonrpsee::core::ClientError),
 }
 
 #[derive(Debug, Error)]
@@ -634,6 +651,25 @@ impl Validator {
         let rotxn = self.dbs.read_txn()?;
         let res = self.dbs.block_hashes.get_block_info(&rotxn, block_hash)?;
         Ok(res)
+    }
+
+    pub(crate) fn get_block_diff(
+        &self,
+        block_hash: &BlockHash,
+    ) -> Result<dbs::diff::Block, GetBip300BlockDeltaError> {
+        let rotxn = self.dbs.read_txn()?;
+        Ok(self.dbs.block_hashes.diff().get(&rotxn, block_hash)?)
+    }
+
+    pub(crate) async fn get_raw_block(
+        &self,
+        block_hash: BlockHash,
+    ) -> Result<Block, GetBip300BlockDeltaError> {
+        self.mainchain_client
+            .get_block(block_hash, U8Witness::<0>)
+            .await
+            .map(|response| response.0)
+            .map_err(GetBip300BlockDeltaError::GetBlock)
     }
 
     /// Get block infos for the specified block hash, and up to max_ancestors
