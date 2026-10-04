@@ -11,6 +11,8 @@ COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
+ARG CARGO_BUILD_JOBS=2
+ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 COPY --from=planner /workspace/recipe.json recipe.json
 RUN cargo chef cook --locked --release \
     --package bip300301_enforcer \
