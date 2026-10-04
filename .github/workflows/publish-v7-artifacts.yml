@@ -13,7 +13,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Install OCI copy tool
-        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends skopeo
+        run:
+          sudo apt-get update && sudo apt-get install --yes
+          --no-install-recommends skopeo
       - name: Verify and publish the approved bytes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
