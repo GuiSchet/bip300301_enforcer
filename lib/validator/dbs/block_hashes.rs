@@ -392,6 +392,7 @@ impl BlockHashDbs {
             prev_block_hash: header.prev_blockhash,
             height,
             work: header.work(),
+            cumulative_work: self.cumulative_work.try_get(rotxn, block_hash)?,
             timestamp: header.time,
         };
         Ok(Some(header_info))

@@ -2,6 +2,11 @@ name: Publish reviewed observer image
 
 on:
   workflow_dispatch:
+    inputs:
+      reviewed_commit:
+        description: Full source commit that passed review and tests
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -9,8 +14,7 @@ permissions:
 
 env:
   IMAGE: ghcr.io/guischet/bip300301_enforcer
-  SOURCE_COMMIT: 0740a39380b39885fe8655f79f78150001d8a15b
-  SOURCE_TAG: sha-0740a39380b3
+  SOURCE_COMMIT: ${{ inputs.reviewed_commit }}
 
 jobs:
   publish:
@@ -19,6 +23,14 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      - name: Validate immutable review reference
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${SOURCE_COMMIT}" =~ ^[0-9a-f]{40}$ ]]
+          printf 'tag=sha-%s\n' "${SOURCE_COMMIT:0:12}" >> "${GITHUB_OUTPUT}"
+
       - name: Check out the reviewed source commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -51,7 +63,7 @@ jobs:
           file: Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ env.IMAGE }}:${{ env.SOURCE_TAG }}
+          tags: ${{ env.IMAGE }}:${{ steps.source.outputs.tag }}
           build-args: |
             RUST_VERSION=${{ steps.rust-version.outputs.version }}
           labels: |

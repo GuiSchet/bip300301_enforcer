@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use async_broadcast::{InactiveReceiver, Sender as BroadcastSender, broadcast};
+use async_broadcast::{InactiveReceiver, broadcast};
 use bitcoin::{self, Amount, Block, BlockHash, OutPoint, Txid};
 use bitcoin_jsonrpsee::{
     client::{GetBlockClient as _, U8Witness},
@@ -29,6 +29,7 @@ use crate::{
 
 pub mod cusf_enforcer;
 mod dbs;
+pub mod observation;
 pub(crate) use dbs::diff::{
     AckBundleAction as BlockAckBundleAction, Block as BlockDiff, CoinbaseMsg as BlockCoinbaseMsg,
     Tx as BlockTx, ack_sidechain_proposal::Effect as BlockAckSidechainProposalEffect,
@@ -428,9 +429,10 @@ impl ToStatus for GetSidechainsError {
 
 #[derive(Clone)]
 pub struct Validator {
+    pub mempool_readiness: observation::MempoolReadiness,
     dbs: Dbs,
     events_rx: InactiveReceiver<Event>,
-    events_tx: BroadcastSender<Event>,
+    events_tx: observation::EventSender,
     header_sync_progress_rx: Arc<parking_lot::RwLock<Option<WatchReceiver<HeaderSyncProgress>>>>,
     mainchain_client: jsonrpsee::http_client::HttpClient,
     mainchain_rest_client: Option<MainRestClient>,
@@ -476,9 +478,10 @@ impl Validator {
 
         let dbs = Dbs::new(data_dir, network)?;
         Ok(Self {
+            mempool_readiness: Default::default(),
             dbs,
             events_rx: events_rx.deactivate(),
-            events_tx,
+            events_tx: observation::EventSender::new(events_tx),
             header_sync_progress_rx: Arc::new(parking_lot::RwLock::new(None)),
             mainchain_client,
             mainchain_rest_client,
@@ -507,6 +510,32 @@ impl Validator {
             }
         })
         .fuse()
+    }
+
+    pub fn subscribe_mainchain_events(
+        &self,
+    ) -> (u64, async_broadcast::Receiver<observation::ChainOccurrence>) {
+        self.events_tx.subscribe()
+    }
+
+    /// Tip and revision are read from the same database snapshot. The revision
+    /// advances transactionally even for an A -> B -> A reorganization.
+    pub fn observed_chain_tip(
+        &self,
+    ) -> Result<(Option<HeaderInfo>, u64), Box<dyn std::error::Error + Send + Sync>> {
+        let txn = self.dbs.read_txn()?;
+        let revision = self
+            .dbs
+            .observation_revision
+            .try_get(&txn, &())?
+            .unwrap_or(0);
+        let header = self
+            .dbs
+            .current_chain_tip
+            .try_get(&txn, &())?
+            .map(|hash| self.dbs.block_hashes.get_header_info(&txn, &hash))
+            .transpose()?;
+        Ok((header, revision))
     }
 
     /// Returns `None` if there is not a header sync in progress
@@ -671,6 +700,16 @@ impl Validator {
     ) -> Result<dbs::diff::Block, GetBip300BlockDeltaError> {
         let rotxn = self.dbs.read_txn()?;
         Ok(self.dbs.block_hashes.diff().get(&rotxn, block_hash)?)
+    }
+
+    pub(crate) async fn get_block_with_prevouts(
+        &self,
+        hash: BlockHash,
+    ) -> Result<serde_json::Value, jsonrpsee::core::ClientError> {
+        use jsonrpsee::core::client::ClientT as _;
+        self.mainchain_client
+            .request("getblock", jsonrpsee::rpc_params![hash.to_string(), 3])
+            .await
     }
 
     pub(crate) async fn get_raw_block(

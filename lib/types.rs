@@ -687,7 +687,10 @@ pub struct HeaderInfo {
     pub block_hash: BlockHash,
     pub prev_block_hash: BlockHash,
     pub height: u32,
+    /// Proof contributed by this block alone.
     pub work: Work,
+    /// Absolute accumulated work; absent for headers not processed yet.
+    pub cumulative_work: Option<Work>,
     pub timestamp: u32,
 }
 
@@ -848,6 +851,9 @@ pub struct TwoWayPegData {
 }
 
 #[derive(Clone, Debug)]
+// Keep committed events inline in the bounded broadcast queues. Boxing would
+// allocate on every fan-out and change the public validator event interface.
+#[expect(clippy::large_enum_variant)]
 pub enum Event {
     ConnectBlock {
         header_info: HeaderInfo,

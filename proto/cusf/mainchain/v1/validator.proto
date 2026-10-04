@@ -11,10 +11,12 @@ message BlockHeaderInfo {
   cusf.common.v1.ReverseHex block_hash = 1;
   cusf.common.v1.ReverseHex prev_block_hash = 2;
   uint32 height = 3;
-  // Total work as a uint256, little-endian
+  // Work contributed by this block as a uint256, little-endian
   cusf.common.v1.ConsensusHex work = 4;
   // Unix timestamp (seconds since epoch)
   uint64 timestamp = 5;
+  // Absolute accumulated work. Absent until this header has been processed.
+  cusf.common.v1.ConsensusHex cumulative_work = 6;
 }
 
 enum Network {
@@ -72,6 +74,16 @@ message BlockInfo {
 }
 
 service ValidatorService {
+  // Optional independent enrichment. Does not change immutable block deltas.
+  rpc GetConfirmedBmmFees(GetConfirmedBmmFeesRequest) returns (GetConfirmedBmmFeesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // Global committed transitions, including periods without active sidechains.
+  rpc SubscribeMainchainEvents(SubscribeMainchainEventsRequest) returns (stream SubscribeMainchainEventsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
   // Fetches information about a specific mainchain block header,
   // and optionally, it's ancestors
   rpc GetBlockHeaderInfo(GetBlockHeaderInfoRequest) returns (GetBlockHeaderInfoResponse) {
@@ -368,6 +380,8 @@ message GetChainInfoResponse {
 message GetChainTipRequest {}
 message GetChainTipResponse {
   BlockHeaderInfo block_header_info = 1;
+  string observer_session = 2;
+  uint64 chain_revision = 3;
 }
 
 message GetCoinbasePSBTRequest {
@@ -437,6 +451,9 @@ message GetSeenBmmRequestsResponse {
 
   // Sorted richest bid first.
   repeated BmmRequest requests = 1;
+  // Successful responses are from one ready mempool synchronization generation.
+  string observer_session = 2;
+  uint64 mempool_generation = 3;
 }
 
 message GetSidechainProposalsRequest {}
@@ -531,3 +548,34 @@ message SubscribeHeaderSyncProgressResponse {
 
 message StopRequest {}
 message StopResponse {}
+
+message SubscribeMainchainEventsRequest {}
+message SubscribeMainchainEventsResponse {
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    // Subscription boundary: no header and no claim of a current tip.
+    ACTION_SUBSCRIBED = 3;
+    ACTION_CONNECTED = 1;
+    ACTION_DISCONNECTED = 2;
+  }
+  string observer_session = 1;
+  uint64 sequence = 2;
+  Action action = 3;
+  // Connected or disconnected block; absent at the subscription boundary.
+  BlockHeaderInfo header_info = 4;
+}
+
+message GetConfirmedBmmFeesRequest {
+  cusf.common.v1.ReverseHex block_hash = 1;
+}
+message ConfirmedBmmFee {
+  uint32 sidechain_number = 1;
+  cusf.common.v1.ReverseHex txid = 2;
+  optional uint64 fee_sats = 3;
+  string unavailable_reason = 4;
+}
+message GetConfirmedBmmFeesResponse {
+  BlockHeaderInfo header_info = 1;
+  repeated ConfirmedBmmFee fees = 2;
+  string source = 3;
+}

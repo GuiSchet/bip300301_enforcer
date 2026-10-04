@@ -69,7 +69,8 @@ where
             return false;
         };
         match inner {
-            SyncTaskError::SequenceStream(_)
+            SyncTaskError::ApplySyncActionTimeout(_)
+            | SyncTaskError::SequenceStream(_)
             | SyncTaskError::InitialSyncEnforcer(InitialSyncError::SequenceStream(_)) => true,
             SyncTaskError::JsonRpc(err)
             | SyncTaskError::InitialSyncEnforcer(InitialSyncError::JsonRpc(err)) => {

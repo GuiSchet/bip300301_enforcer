@@ -6211,7 +6211,7 @@ pub struct BlockHeaderInfo {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_zero_u32"
     )]
     pub height: u32,
-    /// Total work as a uint256, little-endian
+    /// Work contributed by this block as a uint256, little-endian
     ///
     /// Field 4: `work`
     #[serde(
@@ -6231,6 +6231,18 @@ pub struct BlockHeaderInfo {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_zero_u64"
     )]
     pub timestamp: u64,
+    /// Absolute accumulated work. Absent until this header has been processed.
+    ///
+    /// Field 6: `cumulative_work`
+    #[serde(
+        rename = "cumulativeWork",
+        alias = "cumulative_work",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_unset_message_field"
+    )]
+    pub cumulative_work: ::buffa::MessageField<
+        super::super::common::v1::ConsensusHex,
+        ::buffa::Inline<super::super::common::v1::ConsensusHex>,
+    >,
 }
 impl ::core::fmt::Debug for BlockHeaderInfo {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
@@ -6240,6 +6252,7 @@ impl ::core::fmt::Debug for BlockHeaderInfo {
             .field("height", &self.height)
             .field("work", &self.work)
             .field("timestamp", &self.timestamp)
+            .field("cumulative_work", &self.cumulative_work)
             .finish()
     }
 }
@@ -6354,6 +6367,14 @@ impl ::buffa::Message for BlockHeaderInfo {
         if self.timestamp != 0u64 {
             size += 1u64 + ::buffa::types::uint64_encoded_len(self.timestamp) as u64;
         }
+        if self.cumulative_work.is_set() {
+            let __slot = __cache.reserve();
+            let inner_size = self.cumulative_work.compute_size(__cache);
+            __cache.set(__slot, inner_size);
+            size
+                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                    + inner_size as u64;
+        }
         ::buffa::saturate_size(size)
     }
     fn write_to(
@@ -6392,6 +6413,14 @@ impl ::buffa::Message for BlockHeaderInfo {
         }
         if self.timestamp != 0u64 {
             ::buffa::types::put_uint64_field(5u32, self.timestamp, buf);
+        }
+        if self.cumulative_work.is_set() {
+            ::buffa::types::put_len_delimited_header(
+                6u32,
+                u64::from(__cache.consume_next()),
+                buf,
+            );
+            self.cumulative_work.write_to(__cache, buf);
         }
     }
     fn merge_field(
@@ -6452,6 +6481,17 @@ impl ::buffa::Message for BlockHeaderInfo {
                 )?;
                 self.timestamp = ::buffa::types::decode_uint64(buf)?;
             }
+            6u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::Message::merge_length_delimited(
+                    self.cumulative_work.get_or_insert_default(),
+                    buf,
+                    ctx,
+                )?;
+            }
             _ => {
                 ::buffa::encoding::skip_field_depth(tag, buf, ctx.depth())?;
             }
@@ -6464,6 +6504,7 @@ impl ::buffa::Message for BlockHeaderInfo {
         self.height = 0u32;
         self.work = ::buffa::MessageField::none();
         self.timestamp = 0u64;
+        self.cumulative_work = ::buffa::MessageField::none();
     }
 }
 impl ::buffa::json_helpers::ProtoElemJson for BlockHeaderInfo {
@@ -16490,11 +16531,29 @@ pub struct GetChainTipResponse {
         BlockHeaderInfo,
         ::buffa::Inline<BlockHeaderInfo>,
     >,
+    /// Field 2: `observer_session`
+    #[serde(
+        rename = "observerSession",
+        alias = "observer_session",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub observer_session: ::buffa::alloc::string::String,
+    /// Field 3: `chain_revision`
+    #[serde(
+        rename = "chainRevision",
+        alias = "chain_revision",
+        with = "::buffa::json_helpers::uint64",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_zero_u64"
+    )]
+    pub chain_revision: u64,
 }
 impl ::core::fmt::Debug for GetChainTipResponse {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         f.debug_struct("GetChainTipResponse")
             .field("block_header_info", &self.block_header_info)
+            .field("observer_session", &self.observer_session)
+            .field("chain_revision", &self.chain_revision)
             .finish()
     }
 }
@@ -16587,6 +16646,15 @@ impl ::buffa::Message for GetChainTipResponse {
                 += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
                     + inner_size as u64;
         }
+        if !self.observer_session.is_empty() {
+            size
+                += 1u64
+                    + ::buffa::types::string_encoded_len(&self.observer_session) as u64;
+        }
+        if self.chain_revision != 0u64 {
+            size
+                += 1u64 + ::buffa::types::uint64_encoded_len(self.chain_revision) as u64;
+        }
         ::buffa::saturate_size(size)
     }
     fn write_to(
@@ -16603,6 +16671,12 @@ impl ::buffa::Message for GetChainTipResponse {
                 buf,
             );
             self.block_header_info.write_to(__cache, buf);
+        }
+        if !self.observer_session.is_empty() {
+            ::buffa::types::put_string_field(2u32, &self.observer_session, buf);
+        }
+        if self.chain_revision != 0u64 {
+            ::buffa::types::put_uint64_field(3u32, self.chain_revision, buf);
         }
     }
     fn merge_field(
@@ -16627,6 +16701,20 @@ impl ::buffa::Message for GetChainTipResponse {
                     ctx,
                 )?;
             }
+            2u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.observer_session, buf)?;
+            }
+            3u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::Varint,
+                )?;
+                self.chain_revision = ::buffa::types::decode_uint64(buf)?;
+            }
             _ => {
                 ::buffa::encoding::skip_field_depth(tag, buf, ctx.depth())?;
             }
@@ -16635,6 +16723,8 @@ impl ::buffa::Message for GetChainTipResponse {
     }
     fn clear(&mut self) {
         self.block_header_info = ::buffa::MessageField::none();
+        self.observer_session.clear();
+        self.chain_revision = 0u64;
     }
 }
 impl ::buffa::json_helpers::ProtoElemJson for GetChainTipResponse {
@@ -19588,11 +19678,31 @@ pub struct GetSeenBmmRequestsResponse {
         deserialize_with = "::buffa::json_helpers::null_as_default"
     )]
     pub requests: ::buffa::alloc::vec::Vec<get_seen_bmm_requests_response::BmmRequest>,
+    /// Successful responses are from one ready mempool synchronization generation.
+    ///
+    /// Field 2: `observer_session`
+    #[serde(
+        rename = "observerSession",
+        alias = "observer_session",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub observer_session: ::buffa::alloc::string::String,
+    /// Field 3: `mempool_generation`
+    #[serde(
+        rename = "mempoolGeneration",
+        alias = "mempool_generation",
+        with = "::buffa::json_helpers::uint64",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_zero_u64"
+    )]
+    pub mempool_generation: u64,
 }
 impl ::core::fmt::Debug for GetSeenBmmRequestsResponse {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         f.debug_struct("GetSeenBmmRequestsResponse")
             .field("requests", &self.requests)
+            .field("observer_session", &self.observer_session)
+            .field("mempool_generation", &self.mempool_generation)
             .finish()
     }
 }
@@ -19685,6 +19795,16 @@ impl ::buffa::Message for GetSeenBmmRequestsResponse {
                 += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
                     + inner_size as u64;
         }
+        if !self.observer_session.is_empty() {
+            size
+                += 1u64
+                    + ::buffa::types::string_encoded_len(&self.observer_session) as u64;
+        }
+        if self.mempool_generation != 0u64 {
+            size
+                += 1u64
+                    + ::buffa::types::uint64_encoded_len(self.mempool_generation) as u64;
+        }
         ::buffa::saturate_size(size)
     }
     fn write_to(
@@ -19701,6 +19821,12 @@ impl ::buffa::Message for GetSeenBmmRequestsResponse {
                 buf,
             );
             v.write_to(__cache, buf);
+        }
+        if !self.observer_session.is_empty() {
+            ::buffa::types::put_string_field(2u32, &self.observer_session, buf);
+        }
+        if self.mempool_generation != 0u64 {
+            ::buffa::types::put_uint64_field(3u32, self.mempool_generation, buf);
         }
     }
     fn merge_field(
@@ -19726,6 +19852,20 @@ impl ::buffa::Message for GetSeenBmmRequestsResponse {
                 ::buffa::Message::merge_length_delimited(&mut elem, buf, ctx)?;
                 self.requests.push(elem);
             }
+            2u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.observer_session, buf)?;
+            }
+            3u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::Varint,
+                )?;
+                self.mempool_generation = ::buffa::types::decode_uint64(buf)?;
+            }
             _ => {
                 ::buffa::encoding::skip_field_depth(tag, buf, ctx.depth())?;
             }
@@ -19734,6 +19874,8 @@ impl ::buffa::Message for GetSeenBmmRequestsResponse {
     }
     fn clear(&mut self) {
         self.requests.clear();
+        self.observer_session.clear();
+        self.mempool_generation = 0u64;
     }
 }
 impl ::buffa::json_helpers::ProtoElemJson for GetSeenBmmRequestsResponse {
@@ -24508,6 +24650,1256 @@ pub const __STOP_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buf
     type_url: "type.googleapis.com/cusf.mainchain.v1.StopResponse",
     to_json: ::buffa::type_registry::any_to_json::<StopResponse>,
     from_json: ::buffa::type_registry::any_from_json::<StopResponse>,
+    is_wkt: false,
+};
+#[derive(Clone, PartialEq, Default)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(default)]
+pub struct SubscribeMainchainEventsRequest {}
+impl ::core::fmt::Debug for SubscribeMainchainEventsRequest {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.debug_struct("SubscribeMainchainEventsRequest").finish()
+    }
+}
+impl SubscribeMainchainEventsRequest {
+    /// Protobuf type URL for this message, for use with `Any::pack` and
+    /// `Any::unpack_if`.
+    ///
+    /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
+    pub const TYPE_URL: &'static str = "type.googleapis.com/cusf.mainchain.v1.SubscribeMainchainEventsRequest";
+}
+::buffa::impl_default_instance!(SubscribeMainchainEventsRequest);
+impl ::buffa_descriptor::reflect::Reflectable for SubscribeMainchainEventsRequest {
+    /// Bridge-mode reflective handle: encodes `self` and decodes
+    /// it into a [`DynamicMessage`](::buffa_descriptor::reflect::DynamicMessage)
+    /// against the package's embedded descriptor pool.
+    ///
+    /// # Performance
+    ///
+    /// One full encode/decode round-trip plus a heap allocation per
+    /// call. Hold onto the returned handle for repeated field reads
+    /// rather than calling `reflect()` per field.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the embedded `FileDescriptorSet` is malformed or
+    /// `Self::FULL_NAME` is not registered. Both indicate codegen
+    /// emitted inconsistent output, not consumer misuse — except
+    /// when this type was re-exported from a different
+    /// `buffa-build` invocation, whose pool is a different
+    /// instance. Each `generate_reflection(true)` codegen run
+    /// embeds its own pool; do not mix `reflect()` calls across
+    /// independently-generated crates.
+    fn reflect(&self) -> ::buffa_descriptor::reflect::ReflectCow<'_> {
+        let pool = __buffa::reflect::descriptor_pool();
+        let idx = pool
+            .message_index(<Self as ::buffa::MessageName>::FULL_NAME)
+            .unwrap_or_else(|| {
+                panic!(
+                    "type {:?} not registered in this package's descriptor pool (cross-crate reflect()?)",
+                    < Self as ::buffa::MessageName > ::FULL_NAME,
+                )
+            });
+        ::buffa_descriptor::reflect::ReflectCow::Owned(
+            ::buffa::alloc::boxed::Box::new(
+                ::buffa_descriptor::reflect::DynamicMessage::from_message(
+                    self,
+                    ::buffa::alloc::sync::Arc::clone(pool),
+                    idx,
+                ),
+            ),
+        )
+    }
+}
+impl ::buffa_descriptor::reflect::ReflectElement for SubscribeMainchainEventsRequest {
+    /// Bridge-mode element reflection: each call snapshots this
+    /// element through [`Reflectable::reflect`]
+    /// (one encode/decode round-trip plus an allocation).
+    ///
+    /// [`Reflectable::reflect`]: ::buffa_descriptor::reflect::Reflectable::reflect
+    fn as_value_ref(&self) -> ::buffa_descriptor::reflect::ValueRef<'_> {
+        ::buffa_descriptor::reflect::ValueRef::Message(
+            ::buffa_descriptor::reflect::Reflectable::reflect(self),
+        )
+    }
+}
+impl ::buffa::MessageName for SubscribeMainchainEventsRequest {
+    const PACKAGE: &'static str = "cusf.mainchain.v1";
+    const NAME: &'static str = "SubscribeMainchainEventsRequest";
+    const FULL_NAME: &'static str = "cusf.mainchain.v1.SubscribeMainchainEventsRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/cusf.mainchain.v1.SubscribeMainchainEventsRequest";
+}
+impl ::buffa::Message for SubscribeMainchainEventsRequest {
+    /// Returns the total encoded size in bytes.
+    ///
+    /// Accumulates in `u64` (which cannot overflow for in-memory
+    /// data) and saturates to `u32` at return, so a message whose
+    /// encoded size exceeds the 2 GiB protobuf limit yields a value
+    /// above [`::buffa::MAX_MESSAGE_BYTES`] that the encode entry
+    /// points reject, never a silently wrapped size.
+    #[allow(clippy::let_and_return)]
+    fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        let size = 0u64;
+        ::buffa::saturate_size(size)
+    }
+    fn write_to(
+        &self,
+        _cache: &mut ::buffa::SizeCache,
+        _buf: &mut impl ::buffa::EncodeSink,
+    ) {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+    }
+    fn merge_field(
+        &mut self,
+        tag: ::buffa::encoding::Tag,
+        buf: &mut impl ::buffa::bytes::Buf,
+        ctx: ::buffa::DecodeContext<'_>,
+    ) -> ::core::result::Result<(), ::buffa::DecodeError> {
+        #[allow(unused_imports)]
+        use ::buffa::bytes::Buf as _;
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        match tag.field_number() {
+            _ => {
+                ::buffa::encoding::skip_field_depth(tag, buf, ctx.depth())?;
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+    fn clear(&mut self) {}
+}
+impl ::buffa::json_helpers::ProtoElemJson for SubscribeMainchainEventsRequest {
+    fn serialize_proto_json<S: ::serde::Serializer>(
+        v: &Self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        ::serde::Serialize::serialize(v, s)
+    }
+    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        <Self as ::serde::Deserialize>::deserialize(d)
+    }
+}
+#[doc(hidden)]
+pub const __SUBSCRIBE_MAINCHAIN_EVENTS_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
+    type_url: "type.googleapis.com/cusf.mainchain.v1.SubscribeMainchainEventsRequest",
+    to_json: ::buffa::type_registry::any_to_json::<SubscribeMainchainEventsRequest>,
+    from_json: ::buffa::type_registry::any_from_json::<SubscribeMainchainEventsRequest>,
+    is_wkt: false,
+};
+#[derive(Clone, PartialEq, Default)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(default)]
+pub struct SubscribeMainchainEventsResponse {
+    /// Field 1: `observer_session`
+    #[serde(
+        rename = "observerSession",
+        alias = "observer_session",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub observer_session: ::buffa::alloc::string::String,
+    /// Field 2: `sequence`
+    #[serde(
+        rename = "sequence",
+        with = "::buffa::json_helpers::uint64",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_zero_u64"
+    )]
+    pub sequence: u64,
+    /// Field 3: `action`
+    #[serde(
+        rename = "action",
+        with = "::buffa::json_helpers::proto_enum",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_default_enum_value"
+    )]
+    pub action: ::buffa::EnumValue<subscribe_mainchain_events_response::Action>,
+    /// Connected or disconnected block; absent at the subscription boundary.
+    ///
+    /// Field 4: `header_info`
+    #[serde(
+        rename = "headerInfo",
+        alias = "header_info",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_unset_message_field"
+    )]
+    pub header_info: ::buffa::MessageField<
+        BlockHeaderInfo,
+        ::buffa::Inline<BlockHeaderInfo>,
+    >,
+}
+impl ::core::fmt::Debug for SubscribeMainchainEventsResponse {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.debug_struct("SubscribeMainchainEventsResponse")
+            .field("observer_session", &self.observer_session)
+            .field("sequence", &self.sequence)
+            .field("action", &self.action)
+            .field("header_info", &self.header_info)
+            .finish()
+    }
+}
+impl SubscribeMainchainEventsResponse {
+    /// Protobuf type URL for this message, for use with `Any::pack` and
+    /// `Any::unpack_if`.
+    ///
+    /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
+    pub const TYPE_URL: &'static str = "type.googleapis.com/cusf.mainchain.v1.SubscribeMainchainEventsResponse";
+}
+::buffa::impl_default_instance!(SubscribeMainchainEventsResponse);
+impl ::buffa_descriptor::reflect::Reflectable for SubscribeMainchainEventsResponse {
+    /// Bridge-mode reflective handle: encodes `self` and decodes
+    /// it into a [`DynamicMessage`](::buffa_descriptor::reflect::DynamicMessage)
+    /// against the package's embedded descriptor pool.
+    ///
+    /// # Performance
+    ///
+    /// One full encode/decode round-trip plus a heap allocation per
+    /// call. Hold onto the returned handle for repeated field reads
+    /// rather than calling `reflect()` per field.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the embedded `FileDescriptorSet` is malformed or
+    /// `Self::FULL_NAME` is not registered. Both indicate codegen
+    /// emitted inconsistent output, not consumer misuse — except
+    /// when this type was re-exported from a different
+    /// `buffa-build` invocation, whose pool is a different
+    /// instance. Each `generate_reflection(true)` codegen run
+    /// embeds its own pool; do not mix `reflect()` calls across
+    /// independently-generated crates.
+    fn reflect(&self) -> ::buffa_descriptor::reflect::ReflectCow<'_> {
+        let pool = __buffa::reflect::descriptor_pool();
+        let idx = pool
+            .message_index(<Self as ::buffa::MessageName>::FULL_NAME)
+            .unwrap_or_else(|| {
+                panic!(
+                    "type {:?} not registered in this package's descriptor pool (cross-crate reflect()?)",
+                    < Self as ::buffa::MessageName > ::FULL_NAME,
+                )
+            });
+        ::buffa_descriptor::reflect::ReflectCow::Owned(
+            ::buffa::alloc::boxed::Box::new(
+                ::buffa_descriptor::reflect::DynamicMessage::from_message(
+                    self,
+                    ::buffa::alloc::sync::Arc::clone(pool),
+                    idx,
+                ),
+            ),
+        )
+    }
+}
+impl ::buffa_descriptor::reflect::ReflectElement for SubscribeMainchainEventsResponse {
+    /// Bridge-mode element reflection: each call snapshots this
+    /// element through [`Reflectable::reflect`]
+    /// (one encode/decode round-trip plus an allocation).
+    ///
+    /// [`Reflectable::reflect`]: ::buffa_descriptor::reflect::Reflectable::reflect
+    fn as_value_ref(&self) -> ::buffa_descriptor::reflect::ValueRef<'_> {
+        ::buffa_descriptor::reflect::ValueRef::Message(
+            ::buffa_descriptor::reflect::Reflectable::reflect(self),
+        )
+    }
+}
+impl ::buffa::MessageName for SubscribeMainchainEventsResponse {
+    const PACKAGE: &'static str = "cusf.mainchain.v1";
+    const NAME: &'static str = "SubscribeMainchainEventsResponse";
+    const FULL_NAME: &'static str = "cusf.mainchain.v1.SubscribeMainchainEventsResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/cusf.mainchain.v1.SubscribeMainchainEventsResponse";
+}
+impl ::buffa::Message for SubscribeMainchainEventsResponse {
+    /// Returns the total encoded size in bytes.
+    ///
+    /// Accumulates in `u64` (which cannot overflow for in-memory
+    /// data) and saturates to `u32` at return, so a message whose
+    /// encoded size exceeds the 2 GiB protobuf limit yields a value
+    /// above [`::buffa::MAX_MESSAGE_BYTES`] that the encode entry
+    /// points reject, never a silently wrapped size.
+    #[allow(clippy::let_and_return)]
+    fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        let mut size = 0u64;
+        if !self.observer_session.is_empty() {
+            size
+                += 1u64
+                    + ::buffa::types::string_encoded_len(&self.observer_session) as u64;
+        }
+        if self.sequence != 0u64 {
+            size += 1u64 + ::buffa::types::uint64_encoded_len(self.sequence) as u64;
+        }
+        {
+            let val = self.action.to_i32();
+            if val != 0 {
+                size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
+            }
+        }
+        if self.header_info.is_set() {
+            let __slot = __cache.reserve();
+            let inner_size = self.header_info.compute_size(__cache);
+            __cache.set(__slot, inner_size);
+            size
+                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                    + inner_size as u64;
+        }
+        ::buffa::saturate_size(size)
+    }
+    fn write_to(
+        &self,
+        __cache: &mut ::buffa::SizeCache,
+        buf: &mut impl ::buffa::EncodeSink,
+    ) {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        if !self.observer_session.is_empty() {
+            ::buffa::types::put_string_field(1u32, &self.observer_session, buf);
+        }
+        if self.sequence != 0u64 {
+            ::buffa::types::put_uint64_field(2u32, self.sequence, buf);
+        }
+        {
+            let val = self.action.to_i32();
+            if val != 0 {
+                ::buffa::types::put_int32_field(3u32, val, buf);
+            }
+        }
+        if self.header_info.is_set() {
+            ::buffa::types::put_len_delimited_header(
+                4u32,
+                u64::from(__cache.consume_next()),
+                buf,
+            );
+            self.header_info.write_to(__cache, buf);
+        }
+    }
+    fn merge_field(
+        &mut self,
+        tag: ::buffa::encoding::Tag,
+        buf: &mut impl ::buffa::bytes::Buf,
+        ctx: ::buffa::DecodeContext<'_>,
+    ) -> ::core::result::Result<(), ::buffa::DecodeError> {
+        #[allow(unused_imports)]
+        use ::buffa::bytes::Buf as _;
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        match tag.field_number() {
+            1u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.observer_session, buf)?;
+            }
+            2u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::Varint,
+                )?;
+                self.sequence = ::buffa::types::decode_uint64(buf)?;
+            }
+            3u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::Varint,
+                )?;
+                self.action = ::buffa::EnumValue::from(
+                    ::buffa::types::decode_int32(buf)?,
+                );
+            }
+            4u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::Message::merge_length_delimited(
+                    self.header_info.get_or_insert_default(),
+                    buf,
+                    ctx,
+                )?;
+            }
+            _ => {
+                ::buffa::encoding::skip_field_depth(tag, buf, ctx.depth())?;
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+    fn clear(&mut self) {
+        self.observer_session.clear();
+        self.sequence = 0u64;
+        self.action = ::buffa::EnumValue::from(0);
+        self.header_info = ::buffa::MessageField::none();
+    }
+}
+impl ::buffa::json_helpers::ProtoElemJson for SubscribeMainchainEventsResponse {
+    fn serialize_proto_json<S: ::serde::Serializer>(
+        v: &Self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        ::serde::Serialize::serialize(v, s)
+    }
+    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        <Self as ::serde::Deserialize>::deserialize(d)
+    }
+}
+#[doc(hidden)]
+pub const __SUBSCRIBE_MAINCHAIN_EVENTS_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
+    type_url: "type.googleapis.com/cusf.mainchain.v1.SubscribeMainchainEventsResponse",
+    to_json: ::buffa::type_registry::any_to_json::<SubscribeMainchainEventsResponse>,
+    from_json: ::buffa::type_registry::any_from_json::<SubscribeMainchainEventsResponse>,
+    is_wkt: false,
+};
+pub mod subscribe_mainchain_events_response {
+    #[allow(unused_imports)]
+    use super::*;
+    #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+    #[repr(i32)]
+    pub enum Action {
+        ACTION_UNSPECIFIED = 0i32,
+        /// Subscription boundary: no header and no claim of a current tip.
+        ACTION_SUBSCRIBED = 3i32,
+        ACTION_CONNECTED = 1i32,
+        ACTION_DISCONNECTED = 2i32,
+    }
+    impl Action {
+        ///Idiomatic alias for [`Self::ACTION_UNSPECIFIED`]; `Debug` prints the variant name.
+        #[allow(non_upper_case_globals)]
+        pub const Unspecified: Self = Self::ACTION_UNSPECIFIED;
+        ///Idiomatic alias for [`Self::ACTION_SUBSCRIBED`]; `Debug` prints the variant name.
+        #[allow(non_upper_case_globals)]
+        pub const Subscribed: Self = Self::ACTION_SUBSCRIBED;
+        ///Idiomatic alias for [`Self::ACTION_CONNECTED`]; `Debug` prints the variant name.
+        #[allow(non_upper_case_globals)]
+        pub const Connected: Self = Self::ACTION_CONNECTED;
+        ///Idiomatic alias for [`Self::ACTION_DISCONNECTED`]; `Debug` prints the variant name.
+        #[allow(non_upper_case_globals)]
+        pub const Disconnected: Self = Self::ACTION_DISCONNECTED;
+    }
+    impl ::core::default::Default for Action {
+        fn default() -> Self {
+            Self::ACTION_UNSPECIFIED
+        }
+    }
+    impl ::serde::Serialize for Action {
+        fn serialize<S: ::serde::Serializer>(
+            &self,
+            s: S,
+        ) -> ::core::result::Result<S::Ok, S::Error> {
+            s.serialize_str(::buffa::Enumeration::proto_name(self))
+        }
+    }
+    impl<'de> ::serde::Deserialize<'de> for Action {
+        fn deserialize<D: ::serde::Deserializer<'de>>(
+            d: D,
+        ) -> ::core::result::Result<Self, D::Error> {
+            struct _V;
+            impl ::serde::de::Visitor<'_> for _V {
+                type Value = Action;
+                fn expecting(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.write_str(
+                        concat!("a string, integer, or null for ", stringify!(Action)),
+                    )
+                }
+                fn visit_str<E: ::serde::de::Error>(
+                    self,
+                    v: &str,
+                ) -> ::core::result::Result<Action, E> {
+                    <Action as ::buffa::Enumeration>::from_proto_name(v)
+                        .ok_or_else(|| { ::serde::de::Error::unknown_variant(v, &[]) })
+                }
+                fn visit_i64<E: ::serde::de::Error>(
+                    self,
+                    v: i64,
+                ) -> ::core::result::Result<Action, E> {
+                    let v32 = i32::try_from(v)
+                        .map_err(|_| {
+                            ::serde::de::Error::custom(
+                                ::buffa::alloc::format!("enum value {v} out of i32 range"),
+                            )
+                        })?;
+                    <Action as ::buffa::Enumeration>::from_i32(v32)
+                        .ok_or_else(|| {
+                            ::serde::de::Error::custom(
+                                ::buffa::alloc::format!("unknown enum value {v32}"),
+                            )
+                        })
+                }
+                fn visit_u64<E: ::serde::de::Error>(
+                    self,
+                    v: u64,
+                ) -> ::core::result::Result<Action, E> {
+                    let v32 = i32::try_from(v)
+                        .map_err(|_| {
+                            ::serde::de::Error::custom(
+                                ::buffa::alloc::format!("enum value {v} out of i32 range"),
+                            )
+                        })?;
+                    <Action as ::buffa::Enumeration>::from_i32(v32)
+                        .ok_or_else(|| {
+                            ::serde::de::Error::custom(
+                                ::buffa::alloc::format!("unknown enum value {v32}"),
+                            )
+                        })
+                }
+                fn visit_unit<E: ::serde::de::Error>(
+                    self,
+                ) -> ::core::result::Result<Action, E> {
+                    ::core::result::Result::Ok(::core::default::Default::default())
+                }
+            }
+            d.deserialize_any(_V)
+        }
+    }
+    impl ::buffa::json_helpers::ProtoElemJson for Action {
+        fn serialize_proto_json<S: ::serde::Serializer>(
+            v: &Self,
+            s: S,
+        ) -> ::core::result::Result<S::Ok, S::Error> {
+            ::serde::Serialize::serialize(v, s)
+        }
+        fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
+            d: D,
+        ) -> ::core::result::Result<Self, D::Error> {
+            <Self as ::serde::Deserialize>::deserialize(d)
+        }
+    }
+    impl ::buffa::Enumeration for Action {
+        fn from_i32(value: i32) -> ::core::option::Option<Self> {
+            match value {
+                0i32 => ::core::option::Option::Some(Self::ACTION_UNSPECIFIED),
+                3i32 => ::core::option::Option::Some(Self::ACTION_SUBSCRIBED),
+                1i32 => ::core::option::Option::Some(Self::ACTION_CONNECTED),
+                2i32 => ::core::option::Option::Some(Self::ACTION_DISCONNECTED),
+                _ => ::core::option::Option::None,
+            }
+        }
+        fn to_i32(&self) -> i32 {
+            *self as i32
+        }
+        fn proto_name(&self) -> &'static str {
+            match self {
+                Self::ACTION_UNSPECIFIED => "ACTION_UNSPECIFIED",
+                Self::ACTION_SUBSCRIBED => "ACTION_SUBSCRIBED",
+                Self::ACTION_CONNECTED => "ACTION_CONNECTED",
+                Self::ACTION_DISCONNECTED => "ACTION_DISCONNECTED",
+            }
+        }
+        fn from_proto_name(name: &str) -> ::core::option::Option<Self> {
+            match name {
+                "ACTION_UNSPECIFIED" => {
+                    ::core::option::Option::Some(Self::ACTION_UNSPECIFIED)
+                }
+                "ACTION_SUBSCRIBED" => {
+                    ::core::option::Option::Some(Self::ACTION_SUBSCRIBED)
+                }
+                "ACTION_CONNECTED" => {
+                    ::core::option::Option::Some(Self::ACTION_CONNECTED)
+                }
+                "ACTION_DISCONNECTED" => {
+                    ::core::option::Option::Some(Self::ACTION_DISCONNECTED)
+                }
+                _ => ::core::option::Option::None,
+            }
+        }
+        fn values() -> &'static [Self] {
+            &[
+                Self::ACTION_UNSPECIFIED,
+                Self::ACTION_SUBSCRIBED,
+                Self::ACTION_CONNECTED,
+                Self::ACTION_DISCONNECTED,
+            ]
+        }
+    }
+}
+#[derive(Clone, PartialEq, Default)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(default)]
+pub struct GetConfirmedBmmFeesRequest {
+    /// Field 1: `block_hash`
+    #[serde(
+        rename = "blockHash",
+        alias = "block_hash",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_unset_message_field"
+    )]
+    pub block_hash: ::buffa::MessageField<
+        super::super::common::v1::ReverseHex,
+        ::buffa::Inline<super::super::common::v1::ReverseHex>,
+    >,
+}
+impl ::core::fmt::Debug for GetConfirmedBmmFeesRequest {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.debug_struct("GetConfirmedBmmFeesRequest")
+            .field("block_hash", &self.block_hash)
+            .finish()
+    }
+}
+impl GetConfirmedBmmFeesRequest {
+    /// Protobuf type URL for this message, for use with `Any::pack` and
+    /// `Any::unpack_if`.
+    ///
+    /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
+    pub const TYPE_URL: &'static str = "type.googleapis.com/cusf.mainchain.v1.GetConfirmedBmmFeesRequest";
+}
+::buffa::impl_default_instance!(GetConfirmedBmmFeesRequest);
+impl ::buffa_descriptor::reflect::Reflectable for GetConfirmedBmmFeesRequest {
+    /// Bridge-mode reflective handle: encodes `self` and decodes
+    /// it into a [`DynamicMessage`](::buffa_descriptor::reflect::DynamicMessage)
+    /// against the package's embedded descriptor pool.
+    ///
+    /// # Performance
+    ///
+    /// One full encode/decode round-trip plus a heap allocation per
+    /// call. Hold onto the returned handle for repeated field reads
+    /// rather than calling `reflect()` per field.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the embedded `FileDescriptorSet` is malformed or
+    /// `Self::FULL_NAME` is not registered. Both indicate codegen
+    /// emitted inconsistent output, not consumer misuse — except
+    /// when this type was re-exported from a different
+    /// `buffa-build` invocation, whose pool is a different
+    /// instance. Each `generate_reflection(true)` codegen run
+    /// embeds its own pool; do not mix `reflect()` calls across
+    /// independently-generated crates.
+    fn reflect(&self) -> ::buffa_descriptor::reflect::ReflectCow<'_> {
+        let pool = __buffa::reflect::descriptor_pool();
+        let idx = pool
+            .message_index(<Self as ::buffa::MessageName>::FULL_NAME)
+            .unwrap_or_else(|| {
+                panic!(
+                    "type {:?} not registered in this package's descriptor pool (cross-crate reflect()?)",
+                    < Self as ::buffa::MessageName > ::FULL_NAME,
+                )
+            });
+        ::buffa_descriptor::reflect::ReflectCow::Owned(
+            ::buffa::alloc::boxed::Box::new(
+                ::buffa_descriptor::reflect::DynamicMessage::from_message(
+                    self,
+                    ::buffa::alloc::sync::Arc::clone(pool),
+                    idx,
+                ),
+            ),
+        )
+    }
+}
+impl ::buffa_descriptor::reflect::ReflectElement for GetConfirmedBmmFeesRequest {
+    /// Bridge-mode element reflection: each call snapshots this
+    /// element through [`Reflectable::reflect`]
+    /// (one encode/decode round-trip plus an allocation).
+    ///
+    /// [`Reflectable::reflect`]: ::buffa_descriptor::reflect::Reflectable::reflect
+    fn as_value_ref(&self) -> ::buffa_descriptor::reflect::ValueRef<'_> {
+        ::buffa_descriptor::reflect::ValueRef::Message(
+            ::buffa_descriptor::reflect::Reflectable::reflect(self),
+        )
+    }
+}
+impl ::buffa::MessageName for GetConfirmedBmmFeesRequest {
+    const PACKAGE: &'static str = "cusf.mainchain.v1";
+    const NAME: &'static str = "GetConfirmedBmmFeesRequest";
+    const FULL_NAME: &'static str = "cusf.mainchain.v1.GetConfirmedBmmFeesRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/cusf.mainchain.v1.GetConfirmedBmmFeesRequest";
+}
+impl ::buffa::Message for GetConfirmedBmmFeesRequest {
+    /// Returns the total encoded size in bytes.
+    ///
+    /// Accumulates in `u64` (which cannot overflow for in-memory
+    /// data) and saturates to `u32` at return, so a message whose
+    /// encoded size exceeds the 2 GiB protobuf limit yields a value
+    /// above [`::buffa::MAX_MESSAGE_BYTES`] that the encode entry
+    /// points reject, never a silently wrapped size.
+    #[allow(clippy::let_and_return)]
+    fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        let mut size = 0u64;
+        if self.block_hash.is_set() {
+            let __slot = __cache.reserve();
+            let inner_size = self.block_hash.compute_size(__cache);
+            __cache.set(__slot, inner_size);
+            size
+                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                    + inner_size as u64;
+        }
+        ::buffa::saturate_size(size)
+    }
+    fn write_to(
+        &self,
+        __cache: &mut ::buffa::SizeCache,
+        buf: &mut impl ::buffa::EncodeSink,
+    ) {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        if self.block_hash.is_set() {
+            ::buffa::types::put_len_delimited_header(
+                1u32,
+                u64::from(__cache.consume_next()),
+                buf,
+            );
+            self.block_hash.write_to(__cache, buf);
+        }
+    }
+    fn merge_field(
+        &mut self,
+        tag: ::buffa::encoding::Tag,
+        buf: &mut impl ::buffa::bytes::Buf,
+        ctx: ::buffa::DecodeContext<'_>,
+    ) -> ::core::result::Result<(), ::buffa::DecodeError> {
+        #[allow(unused_imports)]
+        use ::buffa::bytes::Buf as _;
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        match tag.field_number() {
+            1u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::Message::merge_length_delimited(
+                    self.block_hash.get_or_insert_default(),
+                    buf,
+                    ctx,
+                )?;
+            }
+            _ => {
+                ::buffa::encoding::skip_field_depth(tag, buf, ctx.depth())?;
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+    fn clear(&mut self) {
+        self.block_hash = ::buffa::MessageField::none();
+    }
+}
+impl ::buffa::json_helpers::ProtoElemJson for GetConfirmedBmmFeesRequest {
+    fn serialize_proto_json<S: ::serde::Serializer>(
+        v: &Self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        ::serde::Serialize::serialize(v, s)
+    }
+    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        <Self as ::serde::Deserialize>::deserialize(d)
+    }
+}
+#[doc(hidden)]
+pub const __GET_CONFIRMED_BMM_FEES_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
+    type_url: "type.googleapis.com/cusf.mainchain.v1.GetConfirmedBmmFeesRequest",
+    to_json: ::buffa::type_registry::any_to_json::<GetConfirmedBmmFeesRequest>,
+    from_json: ::buffa::type_registry::any_from_json::<GetConfirmedBmmFeesRequest>,
+    is_wkt: false,
+};
+#[derive(Clone, PartialEq, Default)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(default)]
+pub struct ConfirmedBmmFee {
+    /// Field 1: `sidechain_number`
+    #[serde(
+        rename = "sidechainNumber",
+        alias = "sidechain_number",
+        with = "::buffa::json_helpers::uint32",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_zero_u32"
+    )]
+    pub sidechain_number: u32,
+    /// Field 2: `txid`
+    #[serde(
+        rename = "txid",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_unset_message_field"
+    )]
+    pub txid: ::buffa::MessageField<
+        super::super::common::v1::ReverseHex,
+        ::buffa::Inline<super::super::common::v1::ReverseHex>,
+    >,
+    /// Field 3: `fee_sats`
+    #[serde(
+        rename = "feeSats",
+        alias = "fee_sats",
+        with = "::buffa::json_helpers::opt_uint64",
+        skip_serializing_if = "::core::option::Option::is_none"
+    )]
+    pub fee_sats: ::core::option::Option<u64>,
+    /// Field 4: `unavailable_reason`
+    #[serde(
+        rename = "unavailableReason",
+        alias = "unavailable_reason",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub unavailable_reason: ::buffa::alloc::string::String,
+}
+impl ::core::fmt::Debug for ConfirmedBmmFee {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.debug_struct("ConfirmedBmmFee")
+            .field("sidechain_number", &self.sidechain_number)
+            .field("txid", &self.txid)
+            .field("fee_sats", &self.fee_sats)
+            .field("unavailable_reason", &self.unavailable_reason)
+            .finish()
+    }
+}
+impl ConfirmedBmmFee {
+    /// Protobuf type URL for this message, for use with `Any::pack` and
+    /// `Any::unpack_if`.
+    ///
+    /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
+    pub const TYPE_URL: &'static str = "type.googleapis.com/cusf.mainchain.v1.ConfirmedBmmFee";
+}
+impl ConfirmedBmmFee {
+    #[must_use = "with_* setters return `self` by value; assign or chain the result"]
+    #[inline]
+    ///Sets [`Self::fee_sats`] to `Some(value)`, consuming and returning `self`.
+    pub fn with_fee_sats(mut self, value: u64) -> Self {
+        self.fee_sats = Some(value);
+        self
+    }
+}
+::buffa::impl_default_instance!(ConfirmedBmmFee);
+impl ::buffa_descriptor::reflect::Reflectable for ConfirmedBmmFee {
+    /// Bridge-mode reflective handle: encodes `self` and decodes
+    /// it into a [`DynamicMessage`](::buffa_descriptor::reflect::DynamicMessage)
+    /// against the package's embedded descriptor pool.
+    ///
+    /// # Performance
+    ///
+    /// One full encode/decode round-trip plus a heap allocation per
+    /// call. Hold onto the returned handle for repeated field reads
+    /// rather than calling `reflect()` per field.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the embedded `FileDescriptorSet` is malformed or
+    /// `Self::FULL_NAME` is not registered. Both indicate codegen
+    /// emitted inconsistent output, not consumer misuse — except
+    /// when this type was re-exported from a different
+    /// `buffa-build` invocation, whose pool is a different
+    /// instance. Each `generate_reflection(true)` codegen run
+    /// embeds its own pool; do not mix `reflect()` calls across
+    /// independently-generated crates.
+    fn reflect(&self) -> ::buffa_descriptor::reflect::ReflectCow<'_> {
+        let pool = __buffa::reflect::descriptor_pool();
+        let idx = pool
+            .message_index(<Self as ::buffa::MessageName>::FULL_NAME)
+            .unwrap_or_else(|| {
+                panic!(
+                    "type {:?} not registered in this package's descriptor pool (cross-crate reflect()?)",
+                    < Self as ::buffa::MessageName > ::FULL_NAME,
+                )
+            });
+        ::buffa_descriptor::reflect::ReflectCow::Owned(
+            ::buffa::alloc::boxed::Box::new(
+                ::buffa_descriptor::reflect::DynamicMessage::from_message(
+                    self,
+                    ::buffa::alloc::sync::Arc::clone(pool),
+                    idx,
+                ),
+            ),
+        )
+    }
+}
+impl ::buffa_descriptor::reflect::ReflectElement for ConfirmedBmmFee {
+    /// Bridge-mode element reflection: each call snapshots this
+    /// element through [`Reflectable::reflect`]
+    /// (one encode/decode round-trip plus an allocation).
+    ///
+    /// [`Reflectable::reflect`]: ::buffa_descriptor::reflect::Reflectable::reflect
+    fn as_value_ref(&self) -> ::buffa_descriptor::reflect::ValueRef<'_> {
+        ::buffa_descriptor::reflect::ValueRef::Message(
+            ::buffa_descriptor::reflect::Reflectable::reflect(self),
+        )
+    }
+}
+impl ::buffa::MessageName for ConfirmedBmmFee {
+    const PACKAGE: &'static str = "cusf.mainchain.v1";
+    const NAME: &'static str = "ConfirmedBmmFee";
+    const FULL_NAME: &'static str = "cusf.mainchain.v1.ConfirmedBmmFee";
+    const TYPE_URL: &'static str = "type.googleapis.com/cusf.mainchain.v1.ConfirmedBmmFee";
+}
+impl ::buffa::Message for ConfirmedBmmFee {
+    /// Returns the total encoded size in bytes.
+    ///
+    /// Accumulates in `u64` (which cannot overflow for in-memory
+    /// data) and saturates to `u32` at return, so a message whose
+    /// encoded size exceeds the 2 GiB protobuf limit yields a value
+    /// above [`::buffa::MAX_MESSAGE_BYTES`] that the encode entry
+    /// points reject, never a silently wrapped size.
+    #[allow(clippy::let_and_return)]
+    fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        let mut size = 0u64;
+        if self.sidechain_number != 0u32 {
+            size
+                += 1u64
+                    + ::buffa::types::uint32_encoded_len(self.sidechain_number) as u64;
+        }
+        if self.txid.is_set() {
+            let __slot = __cache.reserve();
+            let inner_size = self.txid.compute_size(__cache);
+            __cache.set(__slot, inner_size);
+            size
+                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                    + inner_size as u64;
+        }
+        if let Some(v) = self.fee_sats {
+            size += 1u64 + ::buffa::types::uint64_encoded_len(v) as u64;
+        }
+        if !self.unavailable_reason.is_empty() {
+            size
+                += 1u64
+                    + ::buffa::types::string_encoded_len(&self.unavailable_reason)
+                        as u64;
+        }
+        ::buffa::saturate_size(size)
+    }
+    fn write_to(
+        &self,
+        __cache: &mut ::buffa::SizeCache,
+        buf: &mut impl ::buffa::EncodeSink,
+    ) {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        if self.sidechain_number != 0u32 {
+            ::buffa::types::put_uint32_field(1u32, self.sidechain_number, buf);
+        }
+        if self.txid.is_set() {
+            ::buffa::types::put_len_delimited_header(
+                2u32,
+                u64::from(__cache.consume_next()),
+                buf,
+            );
+            self.txid.write_to(__cache, buf);
+        }
+        if let Some(v) = self.fee_sats {
+            ::buffa::types::put_uint64_field(3u32, v, buf);
+        }
+        if !self.unavailable_reason.is_empty() {
+            ::buffa::types::put_string_field(4u32, &self.unavailable_reason, buf);
+        }
+    }
+    fn merge_field(
+        &mut self,
+        tag: ::buffa::encoding::Tag,
+        buf: &mut impl ::buffa::bytes::Buf,
+        ctx: ::buffa::DecodeContext<'_>,
+    ) -> ::core::result::Result<(), ::buffa::DecodeError> {
+        #[allow(unused_imports)]
+        use ::buffa::bytes::Buf as _;
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        match tag.field_number() {
+            1u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::Varint,
+                )?;
+                self.sidechain_number = ::buffa::types::decode_uint32(buf)?;
+            }
+            2u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::Message::merge_length_delimited(
+                    self.txid.get_or_insert_default(),
+                    buf,
+                    ctx,
+                )?;
+            }
+            3u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::Varint,
+                )?;
+                self.fee_sats = ::core::option::Option::Some(
+                    ::buffa::types::decode_uint64(buf)?,
+                );
+            }
+            4u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.unavailable_reason, buf)?;
+            }
+            _ => {
+                ::buffa::encoding::skip_field_depth(tag, buf, ctx.depth())?;
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+    fn clear(&mut self) {
+        self.sidechain_number = 0u32;
+        self.txid = ::buffa::MessageField::none();
+        self.fee_sats = ::core::option::Option::None;
+        self.unavailable_reason.clear();
+    }
+}
+impl ::buffa::json_helpers::ProtoElemJson for ConfirmedBmmFee {
+    fn serialize_proto_json<S: ::serde::Serializer>(
+        v: &Self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        ::serde::Serialize::serialize(v, s)
+    }
+    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        <Self as ::serde::Deserialize>::deserialize(d)
+    }
+}
+#[doc(hidden)]
+pub const __CONFIRMED_BMM_FEE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
+    type_url: "type.googleapis.com/cusf.mainchain.v1.ConfirmedBmmFee",
+    to_json: ::buffa::type_registry::any_to_json::<ConfirmedBmmFee>,
+    from_json: ::buffa::type_registry::any_from_json::<ConfirmedBmmFee>,
+    is_wkt: false,
+};
+#[derive(Clone, PartialEq, Default)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(default)]
+pub struct GetConfirmedBmmFeesResponse {
+    /// Field 1: `header_info`
+    #[serde(
+        rename = "headerInfo",
+        alias = "header_info",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_unset_message_field"
+    )]
+    pub header_info: ::buffa::MessageField<
+        BlockHeaderInfo,
+        ::buffa::Inline<BlockHeaderInfo>,
+    >,
+    /// Field 2: `fees`
+    #[serde(
+        rename = "fees",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_vec",
+        deserialize_with = "::buffa::json_helpers::null_as_default"
+    )]
+    pub fees: ::buffa::alloc::vec::Vec<ConfirmedBmmFee>,
+    /// Field 3: `source`
+    #[serde(
+        rename = "source",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub source: ::buffa::alloc::string::String,
+}
+impl ::core::fmt::Debug for GetConfirmedBmmFeesResponse {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.debug_struct("GetConfirmedBmmFeesResponse")
+            .field("header_info", &self.header_info)
+            .field("fees", &self.fees)
+            .field("source", &self.source)
+            .finish()
+    }
+}
+impl GetConfirmedBmmFeesResponse {
+    /// Protobuf type URL for this message, for use with `Any::pack` and
+    /// `Any::unpack_if`.
+    ///
+    /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
+    pub const TYPE_URL: &'static str = "type.googleapis.com/cusf.mainchain.v1.GetConfirmedBmmFeesResponse";
+}
+::buffa::impl_default_instance!(GetConfirmedBmmFeesResponse);
+impl ::buffa_descriptor::reflect::Reflectable for GetConfirmedBmmFeesResponse {
+    /// Bridge-mode reflective handle: encodes `self` and decodes
+    /// it into a [`DynamicMessage`](::buffa_descriptor::reflect::DynamicMessage)
+    /// against the package's embedded descriptor pool.
+    ///
+    /// # Performance
+    ///
+    /// One full encode/decode round-trip plus a heap allocation per
+    /// call. Hold onto the returned handle for repeated field reads
+    /// rather than calling `reflect()` per field.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the embedded `FileDescriptorSet` is malformed or
+    /// `Self::FULL_NAME` is not registered. Both indicate codegen
+    /// emitted inconsistent output, not consumer misuse — except
+    /// when this type was re-exported from a different
+    /// `buffa-build` invocation, whose pool is a different
+    /// instance. Each `generate_reflection(true)` codegen run
+    /// embeds its own pool; do not mix `reflect()` calls across
+    /// independently-generated crates.
+    fn reflect(&self) -> ::buffa_descriptor::reflect::ReflectCow<'_> {
+        let pool = __buffa::reflect::descriptor_pool();
+        let idx = pool
+            .message_index(<Self as ::buffa::MessageName>::FULL_NAME)
+            .unwrap_or_else(|| {
+                panic!(
+                    "type {:?} not registered in this package's descriptor pool (cross-crate reflect()?)",
+                    < Self as ::buffa::MessageName > ::FULL_NAME,
+                )
+            });
+        ::buffa_descriptor::reflect::ReflectCow::Owned(
+            ::buffa::alloc::boxed::Box::new(
+                ::buffa_descriptor::reflect::DynamicMessage::from_message(
+                    self,
+                    ::buffa::alloc::sync::Arc::clone(pool),
+                    idx,
+                ),
+            ),
+        )
+    }
+}
+impl ::buffa_descriptor::reflect::ReflectElement for GetConfirmedBmmFeesResponse {
+    /// Bridge-mode element reflection: each call snapshots this
+    /// element through [`Reflectable::reflect`]
+    /// (one encode/decode round-trip plus an allocation).
+    ///
+    /// [`Reflectable::reflect`]: ::buffa_descriptor::reflect::Reflectable::reflect
+    fn as_value_ref(&self) -> ::buffa_descriptor::reflect::ValueRef<'_> {
+        ::buffa_descriptor::reflect::ValueRef::Message(
+            ::buffa_descriptor::reflect::Reflectable::reflect(self),
+        )
+    }
+}
+impl ::buffa::MessageName for GetConfirmedBmmFeesResponse {
+    const PACKAGE: &'static str = "cusf.mainchain.v1";
+    const NAME: &'static str = "GetConfirmedBmmFeesResponse";
+    const FULL_NAME: &'static str = "cusf.mainchain.v1.GetConfirmedBmmFeesResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/cusf.mainchain.v1.GetConfirmedBmmFeesResponse";
+}
+impl ::buffa::Message for GetConfirmedBmmFeesResponse {
+    /// Returns the total encoded size in bytes.
+    ///
+    /// Accumulates in `u64` (which cannot overflow for in-memory
+    /// data) and saturates to `u32` at return, so a message whose
+    /// encoded size exceeds the 2 GiB protobuf limit yields a value
+    /// above [`::buffa::MAX_MESSAGE_BYTES`] that the encode entry
+    /// points reject, never a silently wrapped size.
+    #[allow(clippy::let_and_return)]
+    fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        let mut size = 0u64;
+        if self.header_info.is_set() {
+            let __slot = __cache.reserve();
+            let inner_size = self.header_info.compute_size(__cache);
+            __cache.set(__slot, inner_size);
+            size
+                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                    + inner_size as u64;
+        }
+        for v in &self.fees {
+            let __slot = __cache.reserve();
+            let inner_size = v.compute_size(__cache);
+            __cache.set(__slot, inner_size);
+            size
+                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                    + inner_size as u64;
+        }
+        if !self.source.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.source) as u64;
+        }
+        ::buffa::saturate_size(size)
+    }
+    fn write_to(
+        &self,
+        __cache: &mut ::buffa::SizeCache,
+        buf: &mut impl ::buffa::EncodeSink,
+    ) {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        if self.header_info.is_set() {
+            ::buffa::types::put_len_delimited_header(
+                1u32,
+                u64::from(__cache.consume_next()),
+                buf,
+            );
+            self.header_info.write_to(__cache, buf);
+        }
+        for v in &self.fees {
+            ::buffa::types::put_len_delimited_header(
+                2u32,
+                u64::from(__cache.consume_next()),
+                buf,
+            );
+            v.write_to(__cache, buf);
+        }
+        if !self.source.is_empty() {
+            ::buffa::types::put_string_field(3u32, &self.source, buf);
+        }
+    }
+    fn merge_field(
+        &mut self,
+        tag: ::buffa::encoding::Tag,
+        buf: &mut impl ::buffa::bytes::Buf,
+        ctx: ::buffa::DecodeContext<'_>,
+    ) -> ::core::result::Result<(), ::buffa::DecodeError> {
+        #[allow(unused_imports)]
+        use ::buffa::bytes::Buf as _;
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        match tag.field_number() {
+            1u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::Message::merge_length_delimited(
+                    self.header_info.get_or_insert_default(),
+                    buf,
+                    ctx,
+                )?;
+            }
+            2u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                let mut elem = ::core::default::Default::default();
+                ctx.register_element_memory(
+                    ::buffa::__private::element_footprint(&elem),
+                )?;
+                ::buffa::Message::merge_length_delimited(&mut elem, buf, ctx)?;
+                self.fees.push(elem);
+            }
+            3u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.source, buf)?;
+            }
+            _ => {
+                ::buffa::encoding::skip_field_depth(tag, buf, ctx.depth())?;
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+    fn clear(&mut self) {
+        self.header_info = ::buffa::MessageField::none();
+        self.fees.clear();
+        self.source.clear();
+    }
+}
+impl ::buffa::json_helpers::ProtoElemJson for GetConfirmedBmmFeesResponse {
+    fn serialize_proto_json<S: ::serde::Serializer>(
+        v: &Self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        ::serde::Serialize::serialize(v, s)
+    }
+    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        <Self as ::serde::Deserialize>::deserialize(d)
+    }
+}
+#[doc(hidden)]
+pub const __GET_CONFIRMED_BMM_FEES_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
+    type_url: "type.googleapis.com/cusf.mainchain.v1.GetConfirmedBmmFeesResponse",
+    to_json: ::buffa::type_registry::any_to_json::<GetConfirmedBmmFeesResponse>,
+    from_json: ::buffa::type_registry::any_from_json::<GetConfirmedBmmFeesResponse>,
     is_wkt: false,
 };
 #[derive(Clone, PartialEq, Default)]
@@ -41553,7 +42945,7 @@ pub mod __buffa {
             >,
             /// Field 3: `height`
             pub height: u32,
-            /// Total work as a uint256, little-endian
+            /// Work contributed by this block as a uint256, little-endian
             ///
             /// Field 4: `work`
             pub work: ::buffa::MessageFieldView<
@@ -41565,6 +42957,14 @@ pub mod __buffa {
             ///
             /// Field 5: `timestamp`
             pub timestamp: u64,
+            /// Absolute accumulated work. Absent until this header has been processed.
+            ///
+            /// Field 6: `cumulative_work`
+            pub cumulative_work: ::buffa::MessageFieldView<
+                super::super::super::super::common::v1::__buffa::view::ConsensusHexView<
+                    'a,
+                >,
+            >,
         }
         impl<'a> ::buffa::MessageView<'a> for BlockHeaderInfoView<'a> {
             type Owned = super::super::BlockHeaderInfo;
@@ -41687,6 +43087,31 @@ pub mod __buffa {
                         )?;
                         view.timestamp = ::buffa::types::decode_uint64(&mut cur)?;
                     }
+                    6u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        let __sub_ctx = ctx.descend()?;
+                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
+                        match view.cumulative_work.as_mut() {
+                            Some(existing) => {
+                                ::buffa::MessageView::merge_into_view(
+                                    existing,
+                                    sub,
+                                    __sub_ctx,
+                                )?
+                            }
+                            None => {
+                                view.cumulative_work = ::buffa::MessageFieldView::set(
+                                    <super::super::super::super::common::v1::__buffa::view::ConsensusHexView as ::buffa::MessageView>::decode_view_ctx(
+                                        sub,
+                                        __sub_ctx,
+                                    )?,
+                                );
+                            }
+                        }
+                    }
                     _ => {
                         ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
                     }
@@ -41748,6 +43173,17 @@ pub mod __buffa {
                         None => ::buffa::MessageField::none(),
                     },
                     timestamp: self.timestamp,
+                    cumulative_work: match self.cumulative_work.as_option() {
+                        Some(v) => {
+                            ::buffa::MessageField::<
+                                super::super::super::super::common::v1::ConsensusHex,
+                                ::buffa::Inline<
+                                    super::super::super::super::common::v1::ConsensusHex,
+                                >,
+                            >::some(v.to_owned_from_source(__buffa_src)?)
+                        }
+                        None => ::buffa::MessageField::none(),
+                    },
                     ..::core::default::Default::default()
                 })
             }
@@ -41791,6 +43227,14 @@ pub mod __buffa {
                         += 1u64
                             + ::buffa::types::uint64_encoded_len(self.timestamp) as u64;
                 }
+                if self.cumulative_work.is_set() {
+                    let __slot = __cache.reserve();
+                    let inner_size = self.cumulative_work.compute_size(__cache);
+                    __cache.set(__slot, inner_size);
+                    size
+                        += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                            + inner_size as u64;
+                }
                 ::buffa::saturate_size(size)
             }
             #[allow(clippy::needless_borrow)]
@@ -41830,6 +43274,14 @@ pub mod __buffa {
                 }
                 if self.timestamp != 0u64 {
                     ::buffa::types::put_uint64_field(5u32, self.timestamp, buf);
+                }
+                if self.cumulative_work.is_set() {
+                    ::buffa::types::put_len_delimited_header(
+                        6u32,
+                        u64::from(__cache.consume_next()),
+                        buf,
+                    );
+                    self.cumulative_work.write_to(__cache, buf);
                 }
             }
         }
@@ -41885,6 +43337,14 @@ pub mod __buffa {
                             "timestamp",
                             &::buffa::json_helpers::ProtoJson(&self.timestamp),
                         )?;
+                }
+                {
+                    if let ::core::option::Option::Some(__v) = self
+                        .cumulative_work
+                        .as_option()
+                    {
+                        __map.serialize_entry("cumulativeWork", __v)?;
+                    }
                 }
                 __map.end()
             }
@@ -42004,7 +43464,7 @@ pub mod __buffa {
             pub fn height(&self) -> u32 {
                 self.0.reborrow().height
             }
-            /// Total work as a uint256, little-endian
+            /// Work contributed by this block as a uint256, little-endian
             ///
             /// Field 4: `work`
             #[must_use]
@@ -42023,6 +43483,19 @@ pub mod __buffa {
             #[must_use]
             pub fn timestamp(&self) -> u64 {
                 self.0.reborrow().timestamp
+            }
+            /// Absolute accumulated work. Absent until this header has been processed.
+            ///
+            /// Field 6: `cumulative_work`
+            #[must_use]
+            pub fn cumulative_work(
+                &self,
+            ) -> &::buffa::MessageFieldView<
+                super::super::super::super::common::v1::__buffa::view::ConsensusHexView<
+                    '_,
+                >,
+            > {
+                &self.0.reborrow().cumulative_work
             }
         }
         impl ::core::convert::From<::buffa::OwnedView<BlockHeaderInfoView<'static>>>
@@ -56267,6 +57740,10 @@ pub mod __buffa {
             pub block_header_info: ::buffa::MessageFieldView<
                 super::super::__buffa::view::BlockHeaderInfoView<'a>,
             >,
+            /// Field 2: `observer_session`
+            pub observer_session: &'a str,
+            /// Field 3: `chain_revision`
+            pub chain_revision: u64,
         }
         impl<'a> ::buffa::MessageView<'a> for GetChainTipResponseView<'a> {
             type Owned = super::super::GetChainTipResponse;
@@ -56325,6 +57802,20 @@ pub mod __buffa {
                             }
                         }
                     }
+                    2u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.observer_session = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    3u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::Varint,
+                        )?;
+                        view.chain_revision = ::buffa::types::decode_uint64(&mut cur)?;
+                    }
                     _ => {
                         ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
                     }
@@ -56360,6 +57851,8 @@ pub mod __buffa {
                         }
                         None => ::buffa::MessageField::none(),
                     },
+                    observer_session: self.observer_session.to_string(),
+                    chain_revision: self.chain_revision,
                     ..::core::default::Default::default()
                 })
             }
@@ -56378,6 +57871,18 @@ pub mod __buffa {
                         += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
                             + inner_size as u64;
                 }
+                if !self.observer_session.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.observer_session)
+                                as u64;
+                }
+                if self.chain_revision != 0u64 {
+                    size
+                        += 1u64
+                            + ::buffa::types::uint64_encoded_len(self.chain_revision)
+                                as u64;
+                }
                 ::buffa::saturate_size(size)
             }
             #[allow(clippy::needless_borrow)]
@@ -56395,6 +57900,12 @@ pub mod __buffa {
                         buf,
                     );
                     self.block_header_info.write_to(__cache, buf);
+                }
+                if !self.observer_session.is_empty() {
+                    ::buffa::types::put_string_field(2u32, &self.observer_session, buf);
+                }
+                if self.chain_revision != 0u64 {
+                    ::buffa::types::put_uint64_field(3u32, self.chain_revision, buf);
                 }
             }
         }
@@ -56423,6 +57934,16 @@ pub mod __buffa {
                     {
                         __map.serialize_entry("blockHeaderInfo", __v)?;
                     }
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.observer_session) {
+                    __map.serialize_entry("observerSession", self.observer_session)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_zero_u64(&self.chain_revision) {
+                    __map
+                        .serialize_entry(
+                            "chainRevision",
+                            &::buffa::json_helpers::ProtoJson(&self.chain_revision),
+                        )?;
                 }
                 __map.end()
             }
@@ -56527,6 +58048,16 @@ pub mod __buffa {
                 super::super::__buffa::view::BlockHeaderInfoView<'_>,
             > {
                 &self.0.reborrow().block_header_info
+            }
+            /// Field 2: `observer_session`
+            #[must_use]
+            pub fn observer_session(&self) -> &'_ str {
+                self.0.reborrow().observer_session
+            }
+            /// Field 3: `chain_revision`
+            #[must_use]
+            pub fn chain_revision(&self) -> u64 {
+                self.0.reborrow().chain_revision
             }
         }
         impl ::core::convert::From<::buffa::OwnedView<GetChainTipResponseView<'static>>>
@@ -61192,6 +62723,12 @@ pub mod __buffa {
                     'a,
                 >,
             >,
+            /// Successful responses are from one ready mempool synchronization generation.
+            ///
+            /// Field 2: `observer_session`
+            pub observer_session: &'a str,
+            /// Field 3: `mempool_generation`
+            pub mempool_generation: u64,
         }
         impl<'a> ::buffa::MessageView<'a> for GetSeenBmmRequestsResponseView<'a> {
             type Owned = super::super::GetSeenBmmRequestsResponse;
@@ -61225,6 +62762,22 @@ pub mod __buffa {
                 let view = self;
                 let mut cur = cur;
                 match tag.field_number() {
+                    2u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.observer_session = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    3u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::Varint,
+                        )?;
+                        view.mempool_generation = ::buffa::types::decode_uint64(
+                            &mut cur,
+                        )?;
+                    }
                     1u32 => {
                         ::buffa::encoding::check_wire_type(
                             tag,
@@ -61276,6 +62829,8 @@ pub mod __buffa {
                         .iter()
                         .map(|v| v.to_owned_from_source(__buffa_src))
                         .collect::<::core::result::Result<_, ::buffa::DecodeError>>()?,
+                    observer_session: self.observer_session.to_string(),
+                    mempool_generation: self.mempool_generation,
                     ..::core::default::Default::default()
                 })
             }
@@ -61294,6 +62849,18 @@ pub mod __buffa {
                         += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
                             + inner_size as u64;
                 }
+                if !self.observer_session.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.observer_session)
+                                as u64;
+                }
+                if self.mempool_generation != 0u64 {
+                    size
+                        += 1u64
+                            + ::buffa::types::uint64_encoded_len(self.mempool_generation)
+                                as u64;
+                }
                 ::buffa::saturate_size(size)
             }
             #[allow(clippy::needless_borrow)]
@@ -61311,6 +62878,12 @@ pub mod __buffa {
                         buf,
                     );
                     v.write_to(__cache, buf);
+                }
+                if !self.observer_session.is_empty() {
+                    ::buffa::types::put_string_field(2u32, &self.observer_session, buf);
+                }
+                if self.mempool_generation != 0u64 {
+                    ::buffa::types::put_uint64_field(3u32, self.mempool_generation, buf);
                 }
             }
         }
@@ -61334,6 +62907,18 @@ pub mod __buffa {
                 let mut __map = __s.serialize_map(::core::option::Option::None)?;
                 if !self.requests.is_empty() {
                     __map.serialize_entry("requests", &*self.requests)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.observer_session) {
+                    __map.serialize_entry("observerSession", self.observer_session)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_zero_u64(
+                    &self.mempool_generation,
+                ) {
+                    __map
+                        .serialize_entry(
+                            "mempoolGeneration",
+                            &::buffa::json_helpers::ProtoJson(&self.mempool_generation),
+                        )?;
                 }
                 __map.end()
             }
@@ -61447,6 +63032,18 @@ pub mod __buffa {
                 >,
             > {
                 &self.0.reborrow().requests
+            }
+            /// Successful responses are from one ready mempool synchronization generation.
+            ///
+            /// Field 2: `observer_session`
+            #[must_use]
+            pub fn observer_session(&self) -> &'_ str {
+                self.0.reborrow().observer_session
+            }
+            /// Field 3: `mempool_generation`
+            #[must_use]
+            pub fn mempool_generation(&self) -> u64 {
+                self.0.reborrow().mempool_generation
             }
         }
         impl ::core::convert::From<
@@ -69460,6 +71057,1749 @@ pub mod __buffa {
             type ViewHandle = StopResponseOwnedView;
         }
         impl ::serde::Serialize for StopResponseOwnedView {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                ::serde::Serialize::serialize(&self.0, __s)
+            }
+        }
+        #[derive(Clone, Debug, Default)]
+        pub struct SubscribeMainchainEventsRequestView<'a> {
+            #[doc(hidden)]
+            pub __buffa_phantom: ::core::marker::PhantomData<&'a ()>,
+        }
+        impl<'a> ::buffa::MessageView<'a> for SubscribeMainchainEventsRequestView<'a> {
+            type Owned = super::super::SubscribeMainchainEventsRequest;
+            fn decode_view(
+                buf: &'a [u8],
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                let __limit = ::core::cell::Cell::new(
+                    ::buffa::DEFAULT_UNKNOWN_FIELD_LIMIT,
+                );
+                <Self as ::buffa::MessageView>::decode_view_ctx(
+                    buf,
+                    ::buffa::DecodeContext::new(::buffa::RECURSION_LIMIT, &__limit),
+                )
+            }
+            fn decode_view_with_ctx(
+                buf: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                <Self as ::buffa::MessageView>::decode_view_ctx(buf, ctx)
+            }
+            #[inline]
+            fn merge_view_field(
+                &mut self,
+                tag: ::buffa::encoding::Tag,
+                cur: &'a [u8],
+                _before_tag: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<&'a [u8], ::buffa::DecodeError> {
+                let _ = ctx;
+                #[allow(unused_variables)]
+                let view = self;
+                let mut cur = cur;
+                match tag.field_number() {
+                    _ => {
+                        ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
+                    }
+                }
+                ::core::result::Result::Ok(cur)
+            }
+            fn to_owned_message(
+                &self,
+            ) -> ::core::result::Result<
+                super::super::SubscribeMainchainEventsRequest,
+                ::buffa::DecodeError,
+            > {
+                self.to_owned_from_source(None)
+            }
+            #[allow(clippy::useless_conversion, clippy::needless_update)]
+            fn to_owned_from_source(
+                &self,
+                __buffa_src: ::core::option::Option<&::buffa::bytes::Bytes>,
+            ) -> ::core::result::Result<
+                super::super::SubscribeMainchainEventsRequest,
+                ::buffa::DecodeError,
+            > {
+                #[allow(unused_imports)]
+                use ::buffa::alloc::string::ToString as _;
+                let _ = __buffa_src;
+                ::core::result::Result::Ok(super::super::SubscribeMainchainEventsRequest {
+                    ..::core::default::Default::default()
+                })
+            }
+        }
+        impl<'a> ::buffa::ViewEncode<'a> for SubscribeMainchainEventsRequestView<'a> {
+            #[allow(clippy::needless_borrow, clippy::let_and_return)]
+            fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+                let size = 0u64;
+                ::buffa::saturate_size(size)
+            }
+            #[allow(clippy::needless_borrow)]
+            fn write_to(
+                &self,
+                _cache: &mut ::buffa::SizeCache,
+                _buf: &mut impl ::buffa::EncodeSink,
+            ) {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+            }
+        }
+        /// Serializes this view as protobuf JSON.
+        ///
+        /// Implicit-presence fields with default values are omitted, `required`
+        /// fields are always emitted, explicit-presence (`optional`) fields are
+        /// emitted only when set, bytes fields are base64-encoded, and enum
+        /// values are their proto name strings.
+        ///
+        /// This impl uses `serialize_map(None)` because the number of emitted
+        /// fields depends on default-omission rules; serializers that require
+        /// known map lengths (e.g. `bincode`) will return a runtime error.
+        /// Use the owned message type for those formats.
+        impl<'__a> ::serde::Serialize for SubscribeMainchainEventsRequestView<'__a> {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                use ::serde::ser::SerializeMap as _;
+                let mut __map = __s.serialize_map(::core::option::Option::None)?;
+                __map.end()
+            }
+        }
+        impl<'a> ::buffa::MessageName for SubscribeMainchainEventsRequestView<'a> {
+            const PACKAGE: &'static str = "cusf.mainchain.v1";
+            const NAME: &'static str = "SubscribeMainchainEventsRequest";
+            const FULL_NAME: &'static str = "cusf.mainchain.v1.SubscribeMainchainEventsRequest";
+            const TYPE_URL: &'static str = "type.googleapis.com/cusf.mainchain.v1.SubscribeMainchainEventsRequest";
+        }
+        ::buffa::impl_default_view_instance!(SubscribeMainchainEventsRequestView);
+        ::buffa::impl_view_reborrow!(SubscribeMainchainEventsRequestView);
+        /** Self-contained, `'static` owned view of a `SubscribeMainchainEventsRequest` message.
+
+ Wraps [`::buffa::OwnedView`]`<`[`SubscribeMainchainEventsRequestView`]`<'static>>`: the decoded view and the [`::buffa::bytes::Bytes`] buffer it borrows from travel together, so the handle is `'static` and `Send + Sync` — suitable for async handlers, spawned tasks, and anywhere a `'static` bound is required.
+
+ Field accessors return borrows tied to `&self`. Use [`Self::view`] to get the full [`SubscribeMainchainEventsRequestView`] when you need struct patterns, iteration helpers, or to pass the view to lifetime-parameterised code.*/
+        #[derive(Clone, Debug)]
+        pub struct SubscribeMainchainEventsRequestOwnedView(
+            ::buffa::OwnedView<SubscribeMainchainEventsRequestView<'static>>,
+        );
+        impl SubscribeMainchainEventsRequestOwnedView {
+            /// Decode an owned view from a [`::buffa::bytes::Bytes`] buffer.
+            ///
+            /// The view borrows directly from the buffer's data; the buffer is
+            /// retained inside the returned handle.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer contains invalid
+            /// protobuf data.
+            pub fn decode(
+                bytes: ::buffa::bytes::Bytes,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    SubscribeMainchainEventsRequestOwnedView(
+                        ::buffa::OwnedView::decode(bytes)?,
+                    ),
+                )
+            }
+            /// Decode with custom [`::buffa::DecodeOptions`] (recursion limit,
+            /// max message size).
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer is invalid or
+            /// exceeds the configured limits.
+            pub fn decode_with_options(
+                bytes: ::buffa::bytes::Bytes,
+                opts: &::buffa::DecodeOptions,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    SubscribeMainchainEventsRequestOwnedView(
+                        ::buffa::OwnedView::decode_with_options(bytes, opts)?,
+                    ),
+                )
+            }
+            /// Build from an owned message via an encode → decode round-trip.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError::MessageTooLarge`] if the
+            /// message's encoded size exceeds the 2 GiB protobuf limit, or
+            /// another [`::buffa::DecodeError`] if the re-encoded bytes are
+            /// somehow invalid (should not happen for well-formed messages).
+            pub fn from_owned(
+                msg: &super::super::SubscribeMainchainEventsRequest,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    SubscribeMainchainEventsRequestOwnedView(
+                        ::buffa::OwnedView::from_owned(msg)?,
+                    ),
+                )
+            }
+            /// Borrow the full [`SubscribeMainchainEventsRequestView`] with its lifetime tied to `&self`.
+            #[must_use]
+            pub fn view(&self) -> &SubscribeMainchainEventsRequestView<'_> {
+                self.0.reborrow()
+            }
+            /// Convert to the owned message type.
+            ///
+            /// Infallible: this type's constructors wire-decode their
+            /// buffer, and a view produced by wire decoding always
+            /// converts. Delegates to [`::buffa::OwnedView::to_owned_message`],
+            /// whose contract also governs handles converted from a raw
+            /// [`::buffa::OwnedView`].
+            #[must_use]
+            pub fn to_owned_message(
+                &self,
+            ) -> super::super::SubscribeMainchainEventsRequest {
+                self.0.to_owned_message()
+            }
+            /// The underlying bytes buffer.
+            #[must_use]
+            pub fn bytes(&self) -> &::buffa::bytes::Bytes {
+                self.0.bytes()
+            }
+            /// Consume the handle, returning the underlying bytes buffer.
+            #[must_use]
+            pub fn into_bytes(self) -> ::buffa::bytes::Bytes {
+                self.0.into_bytes()
+            }
+        }
+        impl ::core::convert::From<
+            ::buffa::OwnedView<SubscribeMainchainEventsRequestView<'static>>,
+        > for SubscribeMainchainEventsRequestOwnedView {
+            fn from(
+                inner: ::buffa::OwnedView<SubscribeMainchainEventsRequestView<'static>>,
+            ) -> Self {
+                SubscribeMainchainEventsRequestOwnedView(inner)
+            }
+        }
+        impl ::core::convert::From<SubscribeMainchainEventsRequestOwnedView>
+        for ::buffa::OwnedView<SubscribeMainchainEventsRequestView<'static>> {
+            fn from(wrapper: SubscribeMainchainEventsRequestOwnedView) -> Self {
+                wrapper.0
+            }
+        }
+        impl ::core::convert::AsRef<
+            ::buffa::OwnedView<SubscribeMainchainEventsRequestView<'static>>,
+        > for SubscribeMainchainEventsRequestOwnedView {
+            fn as_ref(
+                &self,
+            ) -> &::buffa::OwnedView<SubscribeMainchainEventsRequestView<'static>> {
+                &self.0
+            }
+        }
+        impl ::buffa::HasMessageView for super::super::SubscribeMainchainEventsRequest {
+            type View<'a> = SubscribeMainchainEventsRequestView<'a>;
+            type ViewHandle = SubscribeMainchainEventsRequestOwnedView;
+        }
+        impl ::serde::Serialize for SubscribeMainchainEventsRequestOwnedView {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                ::serde::Serialize::serialize(&self.0, __s)
+            }
+        }
+        #[derive(Clone, Debug, Default)]
+        pub struct SubscribeMainchainEventsResponseView<'a> {
+            /// Field 1: `observer_session`
+            pub observer_session: &'a str,
+            /// Field 2: `sequence`
+            pub sequence: u64,
+            /// Field 3: `action`
+            pub action: ::buffa::EnumValue<
+                super::super::subscribe_mainchain_events_response::Action,
+            >,
+            /// Connected or disconnected block; absent at the subscription boundary.
+            ///
+            /// Field 4: `header_info`
+            pub header_info: ::buffa::MessageFieldView<
+                super::super::__buffa::view::BlockHeaderInfoView<'a>,
+            >,
+        }
+        impl<'a> ::buffa::MessageView<'a> for SubscribeMainchainEventsResponseView<'a> {
+            type Owned = super::super::SubscribeMainchainEventsResponse;
+            fn decode_view(
+                buf: &'a [u8],
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                let __limit = ::core::cell::Cell::new(
+                    ::buffa::DEFAULT_UNKNOWN_FIELD_LIMIT,
+                );
+                <Self as ::buffa::MessageView>::decode_view_ctx(
+                    buf,
+                    ::buffa::DecodeContext::new(::buffa::RECURSION_LIMIT, &__limit),
+                )
+            }
+            fn decode_view_with_ctx(
+                buf: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                <Self as ::buffa::MessageView>::decode_view_ctx(buf, ctx)
+            }
+            #[inline]
+            fn merge_view_field(
+                &mut self,
+                tag: ::buffa::encoding::Tag,
+                cur: &'a [u8],
+                _before_tag: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<&'a [u8], ::buffa::DecodeError> {
+                let _ = ctx;
+                #[allow(unused_variables)]
+                let view = self;
+                let mut cur = cur;
+                match tag.field_number() {
+                    1u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.observer_session = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    2u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::Varint,
+                        )?;
+                        view.sequence = ::buffa::types::decode_uint64(&mut cur)?;
+                    }
+                    3u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::Varint,
+                        )?;
+                        view.action = ::buffa::EnumValue::from(
+                            ::buffa::types::decode_int32(&mut cur)?,
+                        );
+                    }
+                    4u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        let __sub_ctx = ctx.descend()?;
+                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
+                        match view.header_info.as_mut() {
+                            Some(existing) => {
+                                ::buffa::MessageView::merge_into_view(
+                                    existing,
+                                    sub,
+                                    __sub_ctx,
+                                )?
+                            }
+                            None => {
+                                view.header_info = ::buffa::MessageFieldView::set(
+                                    <super::super::__buffa::view::BlockHeaderInfoView as ::buffa::MessageView>::decode_view_ctx(
+                                        sub,
+                                        __sub_ctx,
+                                    )?,
+                                );
+                            }
+                        }
+                    }
+                    _ => {
+                        ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
+                    }
+                }
+                ::core::result::Result::Ok(cur)
+            }
+            fn to_owned_message(
+                &self,
+            ) -> ::core::result::Result<
+                super::super::SubscribeMainchainEventsResponse,
+                ::buffa::DecodeError,
+            > {
+                self.to_owned_from_source(None)
+            }
+            #[allow(clippy::useless_conversion, clippy::needless_update)]
+            fn to_owned_from_source(
+                &self,
+                __buffa_src: ::core::option::Option<&::buffa::bytes::Bytes>,
+            ) -> ::core::result::Result<
+                super::super::SubscribeMainchainEventsResponse,
+                ::buffa::DecodeError,
+            > {
+                #[allow(unused_imports)]
+                use ::buffa::alloc::string::ToString as _;
+                let _ = __buffa_src;
+                ::core::result::Result::Ok(super::super::SubscribeMainchainEventsResponse {
+                    observer_session: self.observer_session.to_string(),
+                    sequence: self.sequence,
+                    action: self.action,
+                    header_info: match self.header_info.as_option() {
+                        Some(v) => {
+                            ::buffa::MessageField::<
+                                super::super::BlockHeaderInfo,
+                                ::buffa::Inline<super::super::BlockHeaderInfo>,
+                            >::some(v.to_owned_from_source(__buffa_src)?)
+                        }
+                        None => ::buffa::MessageField::none(),
+                    },
+                    ..::core::default::Default::default()
+                })
+            }
+        }
+        impl<'a> ::buffa::ViewEncode<'a> for SubscribeMainchainEventsResponseView<'a> {
+            #[allow(clippy::needless_borrow, clippy::let_and_return)]
+            fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+                let mut size = 0u64;
+                if !self.observer_session.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.observer_session)
+                                as u64;
+                }
+                if self.sequence != 0u64 {
+                    size
+                        += 1u64
+                            + ::buffa::types::uint64_encoded_len(self.sequence) as u64;
+                }
+                {
+                    let val = self.action.to_i32();
+                    if val != 0 {
+                        size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
+                    }
+                }
+                if self.header_info.is_set() {
+                    let __slot = __cache.reserve();
+                    let inner_size = self.header_info.compute_size(__cache);
+                    __cache.set(__slot, inner_size);
+                    size
+                        += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                            + inner_size as u64;
+                }
+                ::buffa::saturate_size(size)
+            }
+            #[allow(clippy::needless_borrow)]
+            fn write_to(
+                &self,
+                __cache: &mut ::buffa::SizeCache,
+                buf: &mut impl ::buffa::EncodeSink,
+            ) {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+                if !self.observer_session.is_empty() {
+                    ::buffa::types::put_string_field(1u32, &self.observer_session, buf);
+                }
+                if self.sequence != 0u64 {
+                    ::buffa::types::put_uint64_field(2u32, self.sequence, buf);
+                }
+                {
+                    let val = self.action.to_i32();
+                    if val != 0 {
+                        ::buffa::types::put_int32_field(3u32, val, buf);
+                    }
+                }
+                if self.header_info.is_set() {
+                    ::buffa::types::put_len_delimited_header(
+                        4u32,
+                        u64::from(__cache.consume_next()),
+                        buf,
+                    );
+                    self.header_info.write_to(__cache, buf);
+                }
+            }
+        }
+        /// Serializes this view as protobuf JSON.
+        ///
+        /// Implicit-presence fields with default values are omitted, `required`
+        /// fields are always emitted, explicit-presence (`optional`) fields are
+        /// emitted only when set, bytes fields are base64-encoded, and enum
+        /// values are their proto name strings.
+        ///
+        /// This impl uses `serialize_map(None)` because the number of emitted
+        /// fields depends on default-omission rules; serializers that require
+        /// known map lengths (e.g. `bincode`) will return a runtime error.
+        /// Use the owned message type for those formats.
+        impl<'__a> ::serde::Serialize for SubscribeMainchainEventsResponseView<'__a> {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                use ::serde::ser::SerializeMap as _;
+                let mut __map = __s.serialize_map(::core::option::Option::None)?;
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.observer_session) {
+                    __map.serialize_entry("observerSession", self.observer_session)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_zero_u64(&self.sequence) {
+                    __map
+                        .serialize_entry(
+                            "sequence",
+                            &::buffa::json_helpers::ProtoJson(&self.sequence),
+                        )?;
+                }
+                if !::buffa::json_helpers::skip_if::is_default_enum_value(&self.action) {
+                    __map.serialize_entry("action", &self.action)?;
+                }
+                {
+                    if let ::core::option::Option::Some(__v) = self
+                        .header_info
+                        .as_option()
+                    {
+                        __map.serialize_entry("headerInfo", __v)?;
+                    }
+                }
+                __map.end()
+            }
+        }
+        impl<'a> ::buffa::MessageName for SubscribeMainchainEventsResponseView<'a> {
+            const PACKAGE: &'static str = "cusf.mainchain.v1";
+            const NAME: &'static str = "SubscribeMainchainEventsResponse";
+            const FULL_NAME: &'static str = "cusf.mainchain.v1.SubscribeMainchainEventsResponse";
+            const TYPE_URL: &'static str = "type.googleapis.com/cusf.mainchain.v1.SubscribeMainchainEventsResponse";
+        }
+        ::buffa::impl_default_view_instance!(SubscribeMainchainEventsResponseView);
+        ::buffa::impl_view_reborrow!(SubscribeMainchainEventsResponseView);
+        /** Self-contained, `'static` owned view of a `SubscribeMainchainEventsResponse` message.
+
+ Wraps [`::buffa::OwnedView`]`<`[`SubscribeMainchainEventsResponseView`]`<'static>>`: the decoded view and the [`::buffa::bytes::Bytes`] buffer it borrows from travel together, so the handle is `'static` and `Send + Sync` — suitable for async handlers, spawned tasks, and anywhere a `'static` bound is required.
+
+ Field accessors return borrows tied to `&self`. Use [`Self::view`] to get the full [`SubscribeMainchainEventsResponseView`] when you need struct patterns, iteration helpers, or to pass the view to lifetime-parameterised code.*/
+        #[derive(Clone, Debug)]
+        pub struct SubscribeMainchainEventsResponseOwnedView(
+            ::buffa::OwnedView<SubscribeMainchainEventsResponseView<'static>>,
+        );
+        impl SubscribeMainchainEventsResponseOwnedView {
+            /// Decode an owned view from a [`::buffa::bytes::Bytes`] buffer.
+            ///
+            /// The view borrows directly from the buffer's data; the buffer is
+            /// retained inside the returned handle.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer contains invalid
+            /// protobuf data.
+            pub fn decode(
+                bytes: ::buffa::bytes::Bytes,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    SubscribeMainchainEventsResponseOwnedView(
+                        ::buffa::OwnedView::decode(bytes)?,
+                    ),
+                )
+            }
+            /// Decode with custom [`::buffa::DecodeOptions`] (recursion limit,
+            /// max message size).
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer is invalid or
+            /// exceeds the configured limits.
+            pub fn decode_with_options(
+                bytes: ::buffa::bytes::Bytes,
+                opts: &::buffa::DecodeOptions,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    SubscribeMainchainEventsResponseOwnedView(
+                        ::buffa::OwnedView::decode_with_options(bytes, opts)?,
+                    ),
+                )
+            }
+            /// Build from an owned message via an encode → decode round-trip.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError::MessageTooLarge`] if the
+            /// message's encoded size exceeds the 2 GiB protobuf limit, or
+            /// another [`::buffa::DecodeError`] if the re-encoded bytes are
+            /// somehow invalid (should not happen for well-formed messages).
+            pub fn from_owned(
+                msg: &super::super::SubscribeMainchainEventsResponse,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    SubscribeMainchainEventsResponseOwnedView(
+                        ::buffa::OwnedView::from_owned(msg)?,
+                    ),
+                )
+            }
+            /// Borrow the full [`SubscribeMainchainEventsResponseView`] with its lifetime tied to `&self`.
+            #[must_use]
+            pub fn view(&self) -> &SubscribeMainchainEventsResponseView<'_> {
+                self.0.reborrow()
+            }
+            /// Convert to the owned message type.
+            ///
+            /// Infallible: this type's constructors wire-decode their
+            /// buffer, and a view produced by wire decoding always
+            /// converts. Delegates to [`::buffa::OwnedView::to_owned_message`],
+            /// whose contract also governs handles converted from a raw
+            /// [`::buffa::OwnedView`].
+            #[must_use]
+            pub fn to_owned_message(
+                &self,
+            ) -> super::super::SubscribeMainchainEventsResponse {
+                self.0.to_owned_message()
+            }
+            /// The underlying bytes buffer.
+            #[must_use]
+            pub fn bytes(&self) -> &::buffa::bytes::Bytes {
+                self.0.bytes()
+            }
+            /// Consume the handle, returning the underlying bytes buffer.
+            #[must_use]
+            pub fn into_bytes(self) -> ::buffa::bytes::Bytes {
+                self.0.into_bytes()
+            }
+            /// Field 1: `observer_session`
+            #[must_use]
+            pub fn observer_session(&self) -> &'_ str {
+                self.0.reborrow().observer_session
+            }
+            /// Field 2: `sequence`
+            #[must_use]
+            pub fn sequence(&self) -> u64 {
+                self.0.reborrow().sequence
+            }
+            /// Field 3: `action`
+            #[must_use]
+            pub fn action(
+                &self,
+            ) -> ::buffa::EnumValue<
+                super::super::subscribe_mainchain_events_response::Action,
+            > {
+                self.0.reborrow().action
+            }
+            /// Connected or disconnected block; absent at the subscription boundary.
+            ///
+            /// Field 4: `header_info`
+            #[must_use]
+            pub fn header_info(
+                &self,
+            ) -> &::buffa::MessageFieldView<
+                super::super::__buffa::view::BlockHeaderInfoView<'_>,
+            > {
+                &self.0.reborrow().header_info
+            }
+        }
+        impl ::core::convert::From<
+            ::buffa::OwnedView<SubscribeMainchainEventsResponseView<'static>>,
+        > for SubscribeMainchainEventsResponseOwnedView {
+            fn from(
+                inner: ::buffa::OwnedView<SubscribeMainchainEventsResponseView<'static>>,
+            ) -> Self {
+                SubscribeMainchainEventsResponseOwnedView(inner)
+            }
+        }
+        impl ::core::convert::From<SubscribeMainchainEventsResponseOwnedView>
+        for ::buffa::OwnedView<SubscribeMainchainEventsResponseView<'static>> {
+            fn from(wrapper: SubscribeMainchainEventsResponseOwnedView) -> Self {
+                wrapper.0
+            }
+        }
+        impl ::core::convert::AsRef<
+            ::buffa::OwnedView<SubscribeMainchainEventsResponseView<'static>>,
+        > for SubscribeMainchainEventsResponseOwnedView {
+            fn as_ref(
+                &self,
+            ) -> &::buffa::OwnedView<SubscribeMainchainEventsResponseView<'static>> {
+                &self.0
+            }
+        }
+        impl ::buffa::HasMessageView for super::super::SubscribeMainchainEventsResponse {
+            type View<'a> = SubscribeMainchainEventsResponseView<'a>;
+            type ViewHandle = SubscribeMainchainEventsResponseOwnedView;
+        }
+        impl ::serde::Serialize for SubscribeMainchainEventsResponseOwnedView {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                ::serde::Serialize::serialize(&self.0, __s)
+            }
+        }
+        #[derive(Clone, Debug, Default)]
+        pub struct GetConfirmedBmmFeesRequestView<'a> {
+            /// Field 1: `block_hash`
+            pub block_hash: ::buffa::MessageFieldView<
+                super::super::super::super::common::v1::__buffa::view::ReverseHexView<'a>,
+            >,
+        }
+        impl<'a> ::buffa::MessageView<'a> for GetConfirmedBmmFeesRequestView<'a> {
+            type Owned = super::super::GetConfirmedBmmFeesRequest;
+            fn decode_view(
+                buf: &'a [u8],
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                let __limit = ::core::cell::Cell::new(
+                    ::buffa::DEFAULT_UNKNOWN_FIELD_LIMIT,
+                );
+                <Self as ::buffa::MessageView>::decode_view_ctx(
+                    buf,
+                    ::buffa::DecodeContext::new(::buffa::RECURSION_LIMIT, &__limit),
+                )
+            }
+            fn decode_view_with_ctx(
+                buf: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                <Self as ::buffa::MessageView>::decode_view_ctx(buf, ctx)
+            }
+            #[inline]
+            fn merge_view_field(
+                &mut self,
+                tag: ::buffa::encoding::Tag,
+                cur: &'a [u8],
+                _before_tag: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<&'a [u8], ::buffa::DecodeError> {
+                let _ = ctx;
+                #[allow(unused_variables)]
+                let view = self;
+                let mut cur = cur;
+                match tag.field_number() {
+                    1u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        let __sub_ctx = ctx.descend()?;
+                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
+                        match view.block_hash.as_mut() {
+                            Some(existing) => {
+                                ::buffa::MessageView::merge_into_view(
+                                    existing,
+                                    sub,
+                                    __sub_ctx,
+                                )?
+                            }
+                            None => {
+                                view.block_hash = ::buffa::MessageFieldView::set(
+                                    <super::super::super::super::common::v1::__buffa::view::ReverseHexView as ::buffa::MessageView>::decode_view_ctx(
+                                        sub,
+                                        __sub_ctx,
+                                    )?,
+                                );
+                            }
+                        }
+                    }
+                    _ => {
+                        ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
+                    }
+                }
+                ::core::result::Result::Ok(cur)
+            }
+            fn to_owned_message(
+                &self,
+            ) -> ::core::result::Result<
+                super::super::GetConfirmedBmmFeesRequest,
+                ::buffa::DecodeError,
+            > {
+                self.to_owned_from_source(None)
+            }
+            #[allow(clippy::useless_conversion, clippy::needless_update)]
+            fn to_owned_from_source(
+                &self,
+                __buffa_src: ::core::option::Option<&::buffa::bytes::Bytes>,
+            ) -> ::core::result::Result<
+                super::super::GetConfirmedBmmFeesRequest,
+                ::buffa::DecodeError,
+            > {
+                #[allow(unused_imports)]
+                use ::buffa::alloc::string::ToString as _;
+                let _ = __buffa_src;
+                ::core::result::Result::Ok(super::super::GetConfirmedBmmFeesRequest {
+                    block_hash: match self.block_hash.as_option() {
+                        Some(v) => {
+                            ::buffa::MessageField::<
+                                super::super::super::super::common::v1::ReverseHex,
+                                ::buffa::Inline<
+                                    super::super::super::super::common::v1::ReverseHex,
+                                >,
+                            >::some(v.to_owned_from_source(__buffa_src)?)
+                        }
+                        None => ::buffa::MessageField::none(),
+                    },
+                    ..::core::default::Default::default()
+                })
+            }
+        }
+        impl<'a> ::buffa::ViewEncode<'a> for GetConfirmedBmmFeesRequestView<'a> {
+            #[allow(clippy::needless_borrow, clippy::let_and_return)]
+            fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+                let mut size = 0u64;
+                if self.block_hash.is_set() {
+                    let __slot = __cache.reserve();
+                    let inner_size = self.block_hash.compute_size(__cache);
+                    __cache.set(__slot, inner_size);
+                    size
+                        += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                            + inner_size as u64;
+                }
+                ::buffa::saturate_size(size)
+            }
+            #[allow(clippy::needless_borrow)]
+            fn write_to(
+                &self,
+                __cache: &mut ::buffa::SizeCache,
+                buf: &mut impl ::buffa::EncodeSink,
+            ) {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+                if self.block_hash.is_set() {
+                    ::buffa::types::put_len_delimited_header(
+                        1u32,
+                        u64::from(__cache.consume_next()),
+                        buf,
+                    );
+                    self.block_hash.write_to(__cache, buf);
+                }
+            }
+        }
+        /// Serializes this view as protobuf JSON.
+        ///
+        /// Implicit-presence fields with default values are omitted, `required`
+        /// fields are always emitted, explicit-presence (`optional`) fields are
+        /// emitted only when set, bytes fields are base64-encoded, and enum
+        /// values are their proto name strings.
+        ///
+        /// This impl uses `serialize_map(None)` because the number of emitted
+        /// fields depends on default-omission rules; serializers that require
+        /// known map lengths (e.g. `bincode`) will return a runtime error.
+        /// Use the owned message type for those formats.
+        impl<'__a> ::serde::Serialize for GetConfirmedBmmFeesRequestView<'__a> {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                use ::serde::ser::SerializeMap as _;
+                let mut __map = __s.serialize_map(::core::option::Option::None)?;
+                {
+                    if let ::core::option::Option::Some(__v) = self
+                        .block_hash
+                        .as_option()
+                    {
+                        __map.serialize_entry("blockHash", __v)?;
+                    }
+                }
+                __map.end()
+            }
+        }
+        impl<'a> ::buffa::MessageName for GetConfirmedBmmFeesRequestView<'a> {
+            const PACKAGE: &'static str = "cusf.mainchain.v1";
+            const NAME: &'static str = "GetConfirmedBmmFeesRequest";
+            const FULL_NAME: &'static str = "cusf.mainchain.v1.GetConfirmedBmmFeesRequest";
+            const TYPE_URL: &'static str = "type.googleapis.com/cusf.mainchain.v1.GetConfirmedBmmFeesRequest";
+        }
+        ::buffa::impl_default_view_instance!(GetConfirmedBmmFeesRequestView);
+        ::buffa::impl_view_reborrow!(GetConfirmedBmmFeesRequestView);
+        /** Self-contained, `'static` owned view of a `GetConfirmedBmmFeesRequest` message.
+
+ Wraps [`::buffa::OwnedView`]`<`[`GetConfirmedBmmFeesRequestView`]`<'static>>`: the decoded view and the [`::buffa::bytes::Bytes`] buffer it borrows from travel together, so the handle is `'static` and `Send + Sync` — suitable for async handlers, spawned tasks, and anywhere a `'static` bound is required.
+
+ Field accessors return borrows tied to `&self`. Use [`Self::view`] to get the full [`GetConfirmedBmmFeesRequestView`] when you need struct patterns, iteration helpers, or to pass the view to lifetime-parameterised code.*/
+        #[derive(Clone, Debug)]
+        pub struct GetConfirmedBmmFeesRequestOwnedView(
+            ::buffa::OwnedView<GetConfirmedBmmFeesRequestView<'static>>,
+        );
+        impl GetConfirmedBmmFeesRequestOwnedView {
+            /// Decode an owned view from a [`::buffa::bytes::Bytes`] buffer.
+            ///
+            /// The view borrows directly from the buffer's data; the buffer is
+            /// retained inside the returned handle.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer contains invalid
+            /// protobuf data.
+            pub fn decode(
+                bytes: ::buffa::bytes::Bytes,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    GetConfirmedBmmFeesRequestOwnedView(
+                        ::buffa::OwnedView::decode(bytes)?,
+                    ),
+                )
+            }
+            /// Decode with custom [`::buffa::DecodeOptions`] (recursion limit,
+            /// max message size).
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer is invalid or
+            /// exceeds the configured limits.
+            pub fn decode_with_options(
+                bytes: ::buffa::bytes::Bytes,
+                opts: &::buffa::DecodeOptions,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    GetConfirmedBmmFeesRequestOwnedView(
+                        ::buffa::OwnedView::decode_with_options(bytes, opts)?,
+                    ),
+                )
+            }
+            /// Build from an owned message via an encode → decode round-trip.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError::MessageTooLarge`] if the
+            /// message's encoded size exceeds the 2 GiB protobuf limit, or
+            /// another [`::buffa::DecodeError`] if the re-encoded bytes are
+            /// somehow invalid (should not happen for well-formed messages).
+            pub fn from_owned(
+                msg: &super::super::GetConfirmedBmmFeesRequest,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    GetConfirmedBmmFeesRequestOwnedView(
+                        ::buffa::OwnedView::from_owned(msg)?,
+                    ),
+                )
+            }
+            /// Borrow the full [`GetConfirmedBmmFeesRequestView`] with its lifetime tied to `&self`.
+            #[must_use]
+            pub fn view(&self) -> &GetConfirmedBmmFeesRequestView<'_> {
+                self.0.reborrow()
+            }
+            /// Convert to the owned message type.
+            ///
+            /// Infallible: this type's constructors wire-decode their
+            /// buffer, and a view produced by wire decoding always
+            /// converts. Delegates to [`::buffa::OwnedView::to_owned_message`],
+            /// whose contract also governs handles converted from a raw
+            /// [`::buffa::OwnedView`].
+            #[must_use]
+            pub fn to_owned_message(&self) -> super::super::GetConfirmedBmmFeesRequest {
+                self.0.to_owned_message()
+            }
+            /// The underlying bytes buffer.
+            #[must_use]
+            pub fn bytes(&self) -> &::buffa::bytes::Bytes {
+                self.0.bytes()
+            }
+            /// Consume the handle, returning the underlying bytes buffer.
+            #[must_use]
+            pub fn into_bytes(self) -> ::buffa::bytes::Bytes {
+                self.0.into_bytes()
+            }
+            /// Field 1: `block_hash`
+            #[must_use]
+            pub fn block_hash(
+                &self,
+            ) -> &::buffa::MessageFieldView<
+                super::super::super::super::common::v1::__buffa::view::ReverseHexView<'_>,
+            > {
+                &self.0.reborrow().block_hash
+            }
+        }
+        impl ::core::convert::From<
+            ::buffa::OwnedView<GetConfirmedBmmFeesRequestView<'static>>,
+        > for GetConfirmedBmmFeesRequestOwnedView {
+            fn from(
+                inner: ::buffa::OwnedView<GetConfirmedBmmFeesRequestView<'static>>,
+            ) -> Self {
+                GetConfirmedBmmFeesRequestOwnedView(inner)
+            }
+        }
+        impl ::core::convert::From<GetConfirmedBmmFeesRequestOwnedView>
+        for ::buffa::OwnedView<GetConfirmedBmmFeesRequestView<'static>> {
+            fn from(wrapper: GetConfirmedBmmFeesRequestOwnedView) -> Self {
+                wrapper.0
+            }
+        }
+        impl ::core::convert::AsRef<
+            ::buffa::OwnedView<GetConfirmedBmmFeesRequestView<'static>>,
+        > for GetConfirmedBmmFeesRequestOwnedView {
+            fn as_ref(
+                &self,
+            ) -> &::buffa::OwnedView<GetConfirmedBmmFeesRequestView<'static>> {
+                &self.0
+            }
+        }
+        impl ::buffa::HasMessageView for super::super::GetConfirmedBmmFeesRequest {
+            type View<'a> = GetConfirmedBmmFeesRequestView<'a>;
+            type ViewHandle = GetConfirmedBmmFeesRequestOwnedView;
+        }
+        impl ::serde::Serialize for GetConfirmedBmmFeesRequestOwnedView {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                ::serde::Serialize::serialize(&self.0, __s)
+            }
+        }
+        #[derive(Clone, Debug, Default)]
+        pub struct ConfirmedBmmFeeView<'a> {
+            /// Field 1: `sidechain_number`
+            pub sidechain_number: u32,
+            /// Field 2: `txid`
+            pub txid: ::buffa::MessageFieldView<
+                super::super::super::super::common::v1::__buffa::view::ReverseHexView<'a>,
+            >,
+            /// Field 3: `fee_sats`
+            pub fee_sats: ::core::option::Option<u64>,
+            /// Field 4: `unavailable_reason`
+            pub unavailable_reason: &'a str,
+        }
+        impl<'a> ::buffa::MessageView<'a> for ConfirmedBmmFeeView<'a> {
+            type Owned = super::super::ConfirmedBmmFee;
+            fn decode_view(
+                buf: &'a [u8],
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                let __limit = ::core::cell::Cell::new(
+                    ::buffa::DEFAULT_UNKNOWN_FIELD_LIMIT,
+                );
+                <Self as ::buffa::MessageView>::decode_view_ctx(
+                    buf,
+                    ::buffa::DecodeContext::new(::buffa::RECURSION_LIMIT, &__limit),
+                )
+            }
+            fn decode_view_with_ctx(
+                buf: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                <Self as ::buffa::MessageView>::decode_view_ctx(buf, ctx)
+            }
+            #[inline]
+            fn merge_view_field(
+                &mut self,
+                tag: ::buffa::encoding::Tag,
+                cur: &'a [u8],
+                _before_tag: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<&'a [u8], ::buffa::DecodeError> {
+                let _ = ctx;
+                #[allow(unused_variables)]
+                let view = self;
+                let mut cur = cur;
+                match tag.field_number() {
+                    1u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::Varint,
+                        )?;
+                        view.sidechain_number = ::buffa::types::decode_uint32(&mut cur)?;
+                    }
+                    2u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        let __sub_ctx = ctx.descend()?;
+                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
+                        match view.txid.as_mut() {
+                            Some(existing) => {
+                                ::buffa::MessageView::merge_into_view(
+                                    existing,
+                                    sub,
+                                    __sub_ctx,
+                                )?
+                            }
+                            None => {
+                                view.txid = ::buffa::MessageFieldView::set(
+                                    <super::super::super::super::common::v1::__buffa::view::ReverseHexView as ::buffa::MessageView>::decode_view_ctx(
+                                        sub,
+                                        __sub_ctx,
+                                    )?,
+                                );
+                            }
+                        }
+                    }
+                    3u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::Varint,
+                        )?;
+                        view.fee_sats = Some(::buffa::types::decode_uint64(&mut cur)?);
+                    }
+                    4u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.unavailable_reason = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    _ => {
+                        ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
+                    }
+                }
+                ::core::result::Result::Ok(cur)
+            }
+            fn to_owned_message(
+                &self,
+            ) -> ::core::result::Result<
+                super::super::ConfirmedBmmFee,
+                ::buffa::DecodeError,
+            > {
+                self.to_owned_from_source(None)
+            }
+            #[allow(clippy::useless_conversion, clippy::needless_update)]
+            fn to_owned_from_source(
+                &self,
+                __buffa_src: ::core::option::Option<&::buffa::bytes::Bytes>,
+            ) -> ::core::result::Result<
+                super::super::ConfirmedBmmFee,
+                ::buffa::DecodeError,
+            > {
+                #[allow(unused_imports)]
+                use ::buffa::alloc::string::ToString as _;
+                let _ = __buffa_src;
+                ::core::result::Result::Ok(super::super::ConfirmedBmmFee {
+                    sidechain_number: self.sidechain_number,
+                    txid: match self.txid.as_option() {
+                        Some(v) => {
+                            ::buffa::MessageField::<
+                                super::super::super::super::common::v1::ReverseHex,
+                                ::buffa::Inline<
+                                    super::super::super::super::common::v1::ReverseHex,
+                                >,
+                            >::some(v.to_owned_from_source(__buffa_src)?)
+                        }
+                        None => ::buffa::MessageField::none(),
+                    },
+                    fee_sats: self.fee_sats,
+                    unavailable_reason: self.unavailable_reason.to_string(),
+                    ..::core::default::Default::default()
+                })
+            }
+        }
+        impl<'a> ::buffa::ViewEncode<'a> for ConfirmedBmmFeeView<'a> {
+            #[allow(clippy::needless_borrow, clippy::let_and_return)]
+            fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+                let mut size = 0u64;
+                if self.sidechain_number != 0u32 {
+                    size
+                        += 1u64
+                            + ::buffa::types::uint32_encoded_len(self.sidechain_number)
+                                as u64;
+                }
+                if self.txid.is_set() {
+                    let __slot = __cache.reserve();
+                    let inner_size = self.txid.compute_size(__cache);
+                    __cache.set(__slot, inner_size);
+                    size
+                        += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                            + inner_size as u64;
+                }
+                if let Some(v) = self.fee_sats {
+                    size += 1u64 + ::buffa::types::uint64_encoded_len(v) as u64;
+                }
+                if !self.unavailable_reason.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(
+                                &self.unavailable_reason,
+                            ) as u64;
+                }
+                ::buffa::saturate_size(size)
+            }
+            #[allow(clippy::needless_borrow)]
+            fn write_to(
+                &self,
+                __cache: &mut ::buffa::SizeCache,
+                buf: &mut impl ::buffa::EncodeSink,
+            ) {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+                if self.sidechain_number != 0u32 {
+                    ::buffa::types::put_uint32_field(1u32, self.sidechain_number, buf);
+                }
+                if self.txid.is_set() {
+                    ::buffa::types::put_len_delimited_header(
+                        2u32,
+                        u64::from(__cache.consume_next()),
+                        buf,
+                    );
+                    self.txid.write_to(__cache, buf);
+                }
+                if let Some(v) = self.fee_sats {
+                    ::buffa::types::put_uint64_field(3u32, v, buf);
+                }
+                if !self.unavailable_reason.is_empty() {
+                    ::buffa::types::put_string_field(
+                        4u32,
+                        &self.unavailable_reason,
+                        buf,
+                    );
+                }
+            }
+        }
+        /// Serializes this view as protobuf JSON.
+        ///
+        /// Implicit-presence fields with default values are omitted, `required`
+        /// fields are always emitted, explicit-presence (`optional`) fields are
+        /// emitted only when set, bytes fields are base64-encoded, and enum
+        /// values are their proto name strings.
+        ///
+        /// This impl uses `serialize_map(None)` because the number of emitted
+        /// fields depends on default-omission rules; serializers that require
+        /// known map lengths (e.g. `bincode`) will return a runtime error.
+        /// Use the owned message type for those formats.
+        impl<'__a> ::serde::Serialize for ConfirmedBmmFeeView<'__a> {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                use ::serde::ser::SerializeMap as _;
+                let mut __map = __s.serialize_map(::core::option::Option::None)?;
+                if !::buffa::json_helpers::skip_if::is_zero_u32(&self.sidechain_number) {
+                    __map
+                        .serialize_entry(
+                            "sidechainNumber",
+                            &::buffa::json_helpers::ProtoJson(&self.sidechain_number),
+                        )?;
+                }
+                {
+                    if let ::core::option::Option::Some(__v) = self.txid.as_option() {
+                        __map.serialize_entry("txid", __v)?;
+                    }
+                }
+                if let ::core::option::Option::Some(__v) = self.fee_sats {
+                    __map
+                        .serialize_entry(
+                            "feeSats",
+                            &::buffa::json_helpers::ProtoJson(&__v),
+                        )?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(
+                    self.unavailable_reason,
+                ) {
+                    __map.serialize_entry("unavailableReason", self.unavailable_reason)?;
+                }
+                __map.end()
+            }
+        }
+        impl<'a> ::buffa::MessageName for ConfirmedBmmFeeView<'a> {
+            const PACKAGE: &'static str = "cusf.mainchain.v1";
+            const NAME: &'static str = "ConfirmedBmmFee";
+            const FULL_NAME: &'static str = "cusf.mainchain.v1.ConfirmedBmmFee";
+            const TYPE_URL: &'static str = "type.googleapis.com/cusf.mainchain.v1.ConfirmedBmmFee";
+        }
+        ::buffa::impl_default_view_instance!(ConfirmedBmmFeeView);
+        ::buffa::impl_view_reborrow!(ConfirmedBmmFeeView);
+        /** Self-contained, `'static` owned view of a `ConfirmedBmmFee` message.
+
+ Wraps [`::buffa::OwnedView`]`<`[`ConfirmedBmmFeeView`]`<'static>>`: the decoded view and the [`::buffa::bytes::Bytes`] buffer it borrows from travel together, so the handle is `'static` and `Send + Sync` — suitable for async handlers, spawned tasks, and anywhere a `'static` bound is required.
+
+ Field accessors return borrows tied to `&self`. Use [`Self::view`] to get the full [`ConfirmedBmmFeeView`] when you need struct patterns, iteration helpers, or to pass the view to lifetime-parameterised code.*/
+        #[derive(Clone, Debug)]
+        pub struct ConfirmedBmmFeeOwnedView(
+            ::buffa::OwnedView<ConfirmedBmmFeeView<'static>>,
+        );
+        impl ConfirmedBmmFeeOwnedView {
+            /// Decode an owned view from a [`::buffa::bytes::Bytes`] buffer.
+            ///
+            /// The view borrows directly from the buffer's data; the buffer is
+            /// retained inside the returned handle.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer contains invalid
+            /// protobuf data.
+            pub fn decode(
+                bytes: ::buffa::bytes::Bytes,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    ConfirmedBmmFeeOwnedView(::buffa::OwnedView::decode(bytes)?),
+                )
+            }
+            /// Decode with custom [`::buffa::DecodeOptions`] (recursion limit,
+            /// max message size).
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer is invalid or
+            /// exceeds the configured limits.
+            pub fn decode_with_options(
+                bytes: ::buffa::bytes::Bytes,
+                opts: &::buffa::DecodeOptions,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    ConfirmedBmmFeeOwnedView(
+                        ::buffa::OwnedView::decode_with_options(bytes, opts)?,
+                    ),
+                )
+            }
+            /// Build from an owned message via an encode → decode round-trip.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError::MessageTooLarge`] if the
+            /// message's encoded size exceeds the 2 GiB protobuf limit, or
+            /// another [`::buffa::DecodeError`] if the re-encoded bytes are
+            /// somehow invalid (should not happen for well-formed messages).
+            pub fn from_owned(
+                msg: &super::super::ConfirmedBmmFee,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    ConfirmedBmmFeeOwnedView(::buffa::OwnedView::from_owned(msg)?),
+                )
+            }
+            /// Borrow the full [`ConfirmedBmmFeeView`] with its lifetime tied to `&self`.
+            #[must_use]
+            pub fn view(&self) -> &ConfirmedBmmFeeView<'_> {
+                self.0.reborrow()
+            }
+            /// Convert to the owned message type.
+            ///
+            /// Infallible: this type's constructors wire-decode their
+            /// buffer, and a view produced by wire decoding always
+            /// converts. Delegates to [`::buffa::OwnedView::to_owned_message`],
+            /// whose contract also governs handles converted from a raw
+            /// [`::buffa::OwnedView`].
+            #[must_use]
+            pub fn to_owned_message(&self) -> super::super::ConfirmedBmmFee {
+                self.0.to_owned_message()
+            }
+            /// The underlying bytes buffer.
+            #[must_use]
+            pub fn bytes(&self) -> &::buffa::bytes::Bytes {
+                self.0.bytes()
+            }
+            /// Consume the handle, returning the underlying bytes buffer.
+            #[must_use]
+            pub fn into_bytes(self) -> ::buffa::bytes::Bytes {
+                self.0.into_bytes()
+            }
+            /// Field 1: `sidechain_number`
+            #[must_use]
+            pub fn sidechain_number(&self) -> u32 {
+                self.0.reborrow().sidechain_number
+            }
+            /// Field 2: `txid`
+            #[must_use]
+            pub fn txid(
+                &self,
+            ) -> &::buffa::MessageFieldView<
+                super::super::super::super::common::v1::__buffa::view::ReverseHexView<'_>,
+            > {
+                &self.0.reborrow().txid
+            }
+            /// Field 3: `fee_sats`
+            #[must_use]
+            pub fn fee_sats(&self) -> ::core::option::Option<u64> {
+                self.0.reborrow().fee_sats
+            }
+            /// Field 4: `unavailable_reason`
+            #[must_use]
+            pub fn unavailable_reason(&self) -> &'_ str {
+                self.0.reborrow().unavailable_reason
+            }
+        }
+        impl ::core::convert::From<::buffa::OwnedView<ConfirmedBmmFeeView<'static>>>
+        for ConfirmedBmmFeeOwnedView {
+            fn from(inner: ::buffa::OwnedView<ConfirmedBmmFeeView<'static>>) -> Self {
+                ConfirmedBmmFeeOwnedView(inner)
+            }
+        }
+        impl ::core::convert::From<ConfirmedBmmFeeOwnedView>
+        for ::buffa::OwnedView<ConfirmedBmmFeeView<'static>> {
+            fn from(wrapper: ConfirmedBmmFeeOwnedView) -> Self {
+                wrapper.0
+            }
+        }
+        impl ::core::convert::AsRef<::buffa::OwnedView<ConfirmedBmmFeeView<'static>>>
+        for ConfirmedBmmFeeOwnedView {
+            fn as_ref(&self) -> &::buffa::OwnedView<ConfirmedBmmFeeView<'static>> {
+                &self.0
+            }
+        }
+        impl ::buffa::HasMessageView for super::super::ConfirmedBmmFee {
+            type View<'a> = ConfirmedBmmFeeView<'a>;
+            type ViewHandle = ConfirmedBmmFeeOwnedView;
+        }
+        impl ::serde::Serialize for ConfirmedBmmFeeOwnedView {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                ::serde::Serialize::serialize(&self.0, __s)
+            }
+        }
+        #[derive(Clone, Debug, Default)]
+        pub struct GetConfirmedBmmFeesResponseView<'a> {
+            /// Field 1: `header_info`
+            pub header_info: ::buffa::MessageFieldView<
+                super::super::__buffa::view::BlockHeaderInfoView<'a>,
+            >,
+            /// Field 2: `fees`
+            pub fees: ::buffa::RepeatedView<
+                'a,
+                super::super::__buffa::view::ConfirmedBmmFeeView<'a>,
+            >,
+            /// Field 3: `source`
+            pub source: &'a str,
+        }
+        impl<'a> ::buffa::MessageView<'a> for GetConfirmedBmmFeesResponseView<'a> {
+            type Owned = super::super::GetConfirmedBmmFeesResponse;
+            fn decode_view(
+                buf: &'a [u8],
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                let __limit = ::core::cell::Cell::new(
+                    ::buffa::DEFAULT_UNKNOWN_FIELD_LIMIT,
+                );
+                <Self as ::buffa::MessageView>::decode_view_ctx(
+                    buf,
+                    ::buffa::DecodeContext::new(::buffa::RECURSION_LIMIT, &__limit),
+                )
+            }
+            fn decode_view_with_ctx(
+                buf: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                <Self as ::buffa::MessageView>::decode_view_ctx(buf, ctx)
+            }
+            #[inline]
+            fn merge_view_field(
+                &mut self,
+                tag: ::buffa::encoding::Tag,
+                cur: &'a [u8],
+                _before_tag: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<&'a [u8], ::buffa::DecodeError> {
+                let _ = ctx;
+                #[allow(unused_variables)]
+                let view = self;
+                let mut cur = cur;
+                match tag.field_number() {
+                    1u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        let __sub_ctx = ctx.descend()?;
+                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
+                        match view.header_info.as_mut() {
+                            Some(existing) => {
+                                ::buffa::MessageView::merge_into_view(
+                                    existing,
+                                    sub,
+                                    __sub_ctx,
+                                )?
+                            }
+                            None => {
+                                view.header_info = ::buffa::MessageFieldView::set(
+                                    <super::super::__buffa::view::BlockHeaderInfoView as ::buffa::MessageView>::decode_view_ctx(
+                                        sub,
+                                        __sub_ctx,
+                                    )?,
+                                );
+                            }
+                        }
+                    }
+                    3u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.source = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    2u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        let __sub_ctx = ctx.descend()?;
+                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
+                        ctx.register_element_memory(
+                            ::core::mem::size_of::<
+                                super::super::__buffa::view::ConfirmedBmmFeeView,
+                            >(),
+                        )?;
+                        view.fees
+                            .push(
+                                <super::super::__buffa::view::ConfirmedBmmFeeView as ::buffa::MessageView>::decode_view_ctx(
+                                    sub,
+                                    __sub_ctx,
+                                )?,
+                            );
+                    }
+                    _ => {
+                        ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
+                    }
+                }
+                ::core::result::Result::Ok(cur)
+            }
+            fn to_owned_message(
+                &self,
+            ) -> ::core::result::Result<
+                super::super::GetConfirmedBmmFeesResponse,
+                ::buffa::DecodeError,
+            > {
+                self.to_owned_from_source(None)
+            }
+            #[allow(clippy::useless_conversion, clippy::needless_update)]
+            fn to_owned_from_source(
+                &self,
+                __buffa_src: ::core::option::Option<&::buffa::bytes::Bytes>,
+            ) -> ::core::result::Result<
+                super::super::GetConfirmedBmmFeesResponse,
+                ::buffa::DecodeError,
+            > {
+                #[allow(unused_imports)]
+                use ::buffa::alloc::string::ToString as _;
+                let _ = __buffa_src;
+                ::core::result::Result::Ok(super::super::GetConfirmedBmmFeesResponse {
+                    header_info: match self.header_info.as_option() {
+                        Some(v) => {
+                            ::buffa::MessageField::<
+                                super::super::BlockHeaderInfo,
+                                ::buffa::Inline<super::super::BlockHeaderInfo>,
+                            >::some(v.to_owned_from_source(__buffa_src)?)
+                        }
+                        None => ::buffa::MessageField::none(),
+                    },
+                    fees: self
+                        .fees
+                        .iter()
+                        .map(|v| v.to_owned_from_source(__buffa_src))
+                        .collect::<::core::result::Result<_, ::buffa::DecodeError>>()?,
+                    source: self.source.to_string(),
+                    ..::core::default::Default::default()
+                })
+            }
+        }
+        impl<'a> ::buffa::ViewEncode<'a> for GetConfirmedBmmFeesResponseView<'a> {
+            #[allow(clippy::needless_borrow, clippy::let_and_return)]
+            fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+                let mut size = 0u64;
+                if self.header_info.is_set() {
+                    let __slot = __cache.reserve();
+                    let inner_size = self.header_info.compute_size(__cache);
+                    __cache.set(__slot, inner_size);
+                    size
+                        += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                            + inner_size as u64;
+                }
+                for v in &self.fees {
+                    let __slot = __cache.reserve();
+                    let inner_size = v.compute_size(__cache);
+                    __cache.set(__slot, inner_size);
+                    size
+                        += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                            + inner_size as u64;
+                }
+                if !self.source.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.source) as u64;
+                }
+                ::buffa::saturate_size(size)
+            }
+            #[allow(clippy::needless_borrow)]
+            fn write_to(
+                &self,
+                __cache: &mut ::buffa::SizeCache,
+                buf: &mut impl ::buffa::EncodeSink,
+            ) {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+                if self.header_info.is_set() {
+                    ::buffa::types::put_len_delimited_header(
+                        1u32,
+                        u64::from(__cache.consume_next()),
+                        buf,
+                    );
+                    self.header_info.write_to(__cache, buf);
+                }
+                for v in &self.fees {
+                    ::buffa::types::put_len_delimited_header(
+                        2u32,
+                        u64::from(__cache.consume_next()),
+                        buf,
+                    );
+                    v.write_to(__cache, buf);
+                }
+                if !self.source.is_empty() {
+                    ::buffa::types::put_string_field(3u32, &self.source, buf);
+                }
+            }
+        }
+        /// Serializes this view as protobuf JSON.
+        ///
+        /// Implicit-presence fields with default values are omitted, `required`
+        /// fields are always emitted, explicit-presence (`optional`) fields are
+        /// emitted only when set, bytes fields are base64-encoded, and enum
+        /// values are their proto name strings.
+        ///
+        /// This impl uses `serialize_map(None)` because the number of emitted
+        /// fields depends on default-omission rules; serializers that require
+        /// known map lengths (e.g. `bincode`) will return a runtime error.
+        /// Use the owned message type for those formats.
+        impl<'__a> ::serde::Serialize for GetConfirmedBmmFeesResponseView<'__a> {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                use ::serde::ser::SerializeMap as _;
+                let mut __map = __s.serialize_map(::core::option::Option::None)?;
+                {
+                    if let ::core::option::Option::Some(__v) = self
+                        .header_info
+                        .as_option()
+                    {
+                        __map.serialize_entry("headerInfo", __v)?;
+                    }
+                }
+                if !self.fees.is_empty() {
+                    __map.serialize_entry("fees", &*self.fees)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.source) {
+                    __map.serialize_entry("source", self.source)?;
+                }
+                __map.end()
+            }
+        }
+        impl<'a> ::buffa::MessageName for GetConfirmedBmmFeesResponseView<'a> {
+            const PACKAGE: &'static str = "cusf.mainchain.v1";
+            const NAME: &'static str = "GetConfirmedBmmFeesResponse";
+            const FULL_NAME: &'static str = "cusf.mainchain.v1.GetConfirmedBmmFeesResponse";
+            const TYPE_URL: &'static str = "type.googleapis.com/cusf.mainchain.v1.GetConfirmedBmmFeesResponse";
+        }
+        ::buffa::impl_default_view_instance!(GetConfirmedBmmFeesResponseView);
+        ::buffa::impl_view_reborrow!(GetConfirmedBmmFeesResponseView);
+        /** Self-contained, `'static` owned view of a `GetConfirmedBmmFeesResponse` message.
+
+ Wraps [`::buffa::OwnedView`]`<`[`GetConfirmedBmmFeesResponseView`]`<'static>>`: the decoded view and the [`::buffa::bytes::Bytes`] buffer it borrows from travel together, so the handle is `'static` and `Send + Sync` — suitable for async handlers, spawned tasks, and anywhere a `'static` bound is required.
+
+ Field accessors return borrows tied to `&self`. Use [`Self::view`] to get the full [`GetConfirmedBmmFeesResponseView`] when you need struct patterns, iteration helpers, or to pass the view to lifetime-parameterised code.*/
+        #[derive(Clone, Debug)]
+        pub struct GetConfirmedBmmFeesResponseOwnedView(
+            ::buffa::OwnedView<GetConfirmedBmmFeesResponseView<'static>>,
+        );
+        impl GetConfirmedBmmFeesResponseOwnedView {
+            /// Decode an owned view from a [`::buffa::bytes::Bytes`] buffer.
+            ///
+            /// The view borrows directly from the buffer's data; the buffer is
+            /// retained inside the returned handle.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer contains invalid
+            /// protobuf data.
+            pub fn decode(
+                bytes: ::buffa::bytes::Bytes,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    GetConfirmedBmmFeesResponseOwnedView(
+                        ::buffa::OwnedView::decode(bytes)?,
+                    ),
+                )
+            }
+            /// Decode with custom [`::buffa::DecodeOptions`] (recursion limit,
+            /// max message size).
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer is invalid or
+            /// exceeds the configured limits.
+            pub fn decode_with_options(
+                bytes: ::buffa::bytes::Bytes,
+                opts: &::buffa::DecodeOptions,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    GetConfirmedBmmFeesResponseOwnedView(
+                        ::buffa::OwnedView::decode_with_options(bytes, opts)?,
+                    ),
+                )
+            }
+            /// Build from an owned message via an encode → decode round-trip.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError::MessageTooLarge`] if the
+            /// message's encoded size exceeds the 2 GiB protobuf limit, or
+            /// another [`::buffa::DecodeError`] if the re-encoded bytes are
+            /// somehow invalid (should not happen for well-formed messages).
+            pub fn from_owned(
+                msg: &super::super::GetConfirmedBmmFeesResponse,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    GetConfirmedBmmFeesResponseOwnedView(
+                        ::buffa::OwnedView::from_owned(msg)?,
+                    ),
+                )
+            }
+            /// Borrow the full [`GetConfirmedBmmFeesResponseView`] with its lifetime tied to `&self`.
+            #[must_use]
+            pub fn view(&self) -> &GetConfirmedBmmFeesResponseView<'_> {
+                self.0.reborrow()
+            }
+            /// Convert to the owned message type.
+            ///
+            /// Infallible: this type's constructors wire-decode their
+            /// buffer, and a view produced by wire decoding always
+            /// converts. Delegates to [`::buffa::OwnedView::to_owned_message`],
+            /// whose contract also governs handles converted from a raw
+            /// [`::buffa::OwnedView`].
+            #[must_use]
+            pub fn to_owned_message(&self) -> super::super::GetConfirmedBmmFeesResponse {
+                self.0.to_owned_message()
+            }
+            /// The underlying bytes buffer.
+            #[must_use]
+            pub fn bytes(&self) -> &::buffa::bytes::Bytes {
+                self.0.bytes()
+            }
+            /// Consume the handle, returning the underlying bytes buffer.
+            #[must_use]
+            pub fn into_bytes(self) -> ::buffa::bytes::Bytes {
+                self.0.into_bytes()
+            }
+            /// Field 1: `header_info`
+            #[must_use]
+            pub fn header_info(
+                &self,
+            ) -> &::buffa::MessageFieldView<
+                super::super::__buffa::view::BlockHeaderInfoView<'_>,
+            > {
+                &self.0.reborrow().header_info
+            }
+            /// Field 2: `fees`
+            #[must_use]
+            pub fn fees(
+                &self,
+            ) -> &::buffa::RepeatedView<
+                '_,
+                super::super::__buffa::view::ConfirmedBmmFeeView<'_>,
+            > {
+                &self.0.reborrow().fees
+            }
+            /// Field 3: `source`
+            #[must_use]
+            pub fn source(&self) -> &'_ str {
+                self.0.reborrow().source
+            }
+        }
+        impl ::core::convert::From<
+            ::buffa::OwnedView<GetConfirmedBmmFeesResponseView<'static>>,
+        > for GetConfirmedBmmFeesResponseOwnedView {
+            fn from(
+                inner: ::buffa::OwnedView<GetConfirmedBmmFeesResponseView<'static>>,
+            ) -> Self {
+                GetConfirmedBmmFeesResponseOwnedView(inner)
+            }
+        }
+        impl ::core::convert::From<GetConfirmedBmmFeesResponseOwnedView>
+        for ::buffa::OwnedView<GetConfirmedBmmFeesResponseView<'static>> {
+            fn from(wrapper: GetConfirmedBmmFeesResponseOwnedView) -> Self {
+                wrapper.0
+            }
+        }
+        impl ::core::convert::AsRef<
+            ::buffa::OwnedView<GetConfirmedBmmFeesResponseView<'static>>,
+        > for GetConfirmedBmmFeesResponseOwnedView {
+            fn as_ref(
+                &self,
+            ) -> &::buffa::OwnedView<GetConfirmedBmmFeesResponseView<'static>> {
+                &self.0
+            }
+        }
+        impl ::buffa::HasMessageView for super::super::GetConfirmedBmmFeesResponse {
+            type View<'a> = GetConfirmedBmmFeesResponseView<'a>;
+            type ViewHandle = GetConfirmedBmmFeesResponseOwnedView;
+        }
+        impl ::serde::Serialize for GetConfirmedBmmFeesResponseOwnedView {
             fn serialize<__S: ::serde::Serializer>(
                 &self,
                 __s: __S,
@@ -82507,6 +85847,11 @@ pub mod __buffa {
         reg.register_json_any(super::__SUBSCRIBE_HEADER_SYNC_PROGRESS_RESPONSE_JSON_ANY);
         reg.register_json_any(super::__STOP_REQUEST_JSON_ANY);
         reg.register_json_any(super::__STOP_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__SUBSCRIBE_MAINCHAIN_EVENTS_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__SUBSCRIBE_MAINCHAIN_EVENTS_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__GET_CONFIRMED_BMM_FEES_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__CONFIRMED_BMM_FEE_JSON_ANY);
+        reg.register_json_any(super::__GET_CONFIRMED_BMM_FEES_RESPONSE_JSON_ANY);
         reg.register_json_any(super::__WALLET_TRANSACTION_JSON_ANY);
         reg.register_json_any(super::wallet_transaction::__CONFIRMATION_JSON_ANY);
         reg.register_json_any(super::__BROADCAST_WITHDRAWAL_BUNDLE_REQUEST_JSON_ANY);
@@ -83273,146 +86618,153 @@ pub mod __buffa {
             97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 110u8, 101u8,
             114u8, 97u8, 116u8, 101u8, 84u8, 111u8, 65u8, 100u8, 100u8, 114u8, 101u8,
             115u8, 115u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 98u8,
-            6u8, 112u8, 114u8, 111u8, 116u8, 111u8, 51u8, 10u8, 184u8, 119u8, 10u8, 33u8,
-            99u8, 117u8, 115u8, 102u8, 47u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8,
-            97u8, 105u8, 110u8, 47u8, 118u8, 49u8, 47u8, 118u8, 97u8, 108u8, 105u8,
-            100u8, 97u8, 116u8, 111u8, 114u8, 46u8, 112u8, 114u8, 111u8, 116u8, 111u8,
-            18u8, 17u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8,
-            104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 26u8, 27u8, 99u8, 117u8, 115u8,
-            102u8, 47u8, 99u8, 111u8, 109u8, 109u8, 111u8, 110u8, 47u8, 118u8, 49u8,
-            47u8, 99u8, 111u8, 109u8, 109u8, 111u8, 110u8, 46u8, 112u8, 114u8, 111u8,
-            116u8, 111u8, 26u8, 30u8, 99u8, 117u8, 115u8, 102u8, 47u8, 109u8, 97u8,
-            105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 47u8, 118u8, 49u8, 47u8, 99u8,
-            111u8, 109u8, 109u8, 111u8, 110u8, 46u8, 112u8, 114u8, 111u8, 116u8, 111u8,
-            26u8, 30u8, 103u8, 111u8, 111u8, 103u8, 108u8, 101u8, 47u8, 112u8, 114u8,
-            111u8, 116u8, 111u8, 98u8, 117u8, 102u8, 47u8, 119u8, 114u8, 97u8, 112u8,
-            112u8, 101u8, 114u8, 115u8, 46u8, 112u8, 114u8, 111u8, 116u8, 111u8, 34u8,
-            248u8, 1u8, 10u8, 15u8, 66u8, 108u8, 111u8, 99u8, 107u8, 72u8, 101u8, 97u8,
-            100u8, 101u8, 114u8, 73u8, 110u8, 102u8, 111u8, 18u8, 57u8, 10u8, 10u8, 98u8,
-            108u8, 111u8, 99u8, 107u8, 95u8, 104u8, 97u8, 115u8, 104u8, 24u8, 1u8, 32u8,
-            1u8, 40u8, 11u8, 50u8, 26u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 99u8,
-            111u8, 109u8, 109u8, 111u8, 110u8, 46u8, 118u8, 49u8, 46u8, 82u8, 101u8,
-            118u8, 101u8, 114u8, 115u8, 101u8, 72u8, 101u8, 120u8, 82u8, 9u8, 98u8,
-            108u8, 111u8, 99u8, 107u8, 72u8, 97u8, 115u8, 104u8, 18u8, 66u8, 10u8, 15u8,
-            112u8, 114u8, 101u8, 118u8, 95u8, 98u8, 108u8, 111u8, 99u8, 107u8, 95u8,
-            104u8, 97u8, 115u8, 104u8, 24u8, 2u8, 32u8, 1u8, 40u8, 11u8, 50u8, 26u8,
-            46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 99u8, 111u8, 109u8, 109u8, 111u8,
-            110u8, 46u8, 118u8, 49u8, 46u8, 82u8, 101u8, 118u8, 101u8, 114u8, 115u8,
-            101u8, 72u8, 101u8, 120u8, 82u8, 13u8, 112u8, 114u8, 101u8, 118u8, 66u8,
-            108u8, 111u8, 99u8, 107u8, 72u8, 97u8, 115u8, 104u8, 18u8, 22u8, 10u8, 6u8,
-            104u8, 101u8, 105u8, 103u8, 104u8, 116u8, 24u8, 3u8, 32u8, 1u8, 40u8, 13u8,
-            82u8, 6u8, 104u8, 101u8, 105u8, 103u8, 104u8, 116u8, 18u8, 48u8, 10u8, 4u8,
-            119u8, 111u8, 114u8, 107u8, 24u8, 4u8, 32u8, 1u8, 40u8, 11u8, 50u8, 28u8,
-            46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 99u8, 111u8, 109u8, 109u8, 111u8,
-            110u8, 46u8, 118u8, 49u8, 46u8, 67u8, 111u8, 110u8, 115u8, 101u8, 110u8,
-            115u8, 117u8, 115u8, 72u8, 101u8, 120u8, 82u8, 4u8, 119u8, 111u8, 114u8,
-            107u8, 18u8, 28u8, 10u8, 9u8, 116u8, 105u8, 109u8, 101u8, 115u8, 116u8, 97u8,
-            109u8, 112u8, 24u8, 5u8, 32u8, 1u8, 40u8, 4u8, 82u8, 9u8, 116u8, 105u8,
-            109u8, 101u8, 115u8, 116u8, 97u8, 109u8, 112u8, 34u8, 186u8, 2u8, 10u8, 7u8,
-            68u8, 101u8, 112u8, 111u8, 115u8, 105u8, 116u8, 18u8, 69u8, 10u8, 15u8,
-            115u8, 101u8, 113u8, 117u8, 101u8, 110u8, 99u8, 101u8, 95u8, 110u8, 117u8,
-            109u8, 98u8, 101u8, 114u8, 24u8, 1u8, 32u8, 1u8, 40u8, 11u8, 50u8, 28u8,
-            46u8, 103u8, 111u8, 111u8, 103u8, 108u8, 101u8, 46u8, 112u8, 114u8, 111u8,
-            116u8, 111u8, 98u8, 117u8, 102u8, 46u8, 85u8, 73u8, 110u8, 116u8, 54u8, 52u8,
-            86u8, 97u8, 108u8, 117u8, 101u8, 82u8, 14u8, 115u8, 101u8, 113u8, 117u8,
-            101u8, 110u8, 99u8, 101u8, 78u8, 117u8, 109u8, 98u8, 101u8, 114u8, 18u8,
-            55u8, 10u8, 8u8, 111u8, 117u8, 116u8, 112u8, 111u8, 105u8, 110u8, 116u8,
-            24u8, 2u8, 32u8, 1u8, 40u8, 11u8, 50u8, 27u8, 46u8, 99u8, 117u8, 115u8,
-            102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8,
-            46u8, 118u8, 49u8, 46u8, 79u8, 117u8, 116u8, 80u8, 111u8, 105u8, 110u8,
-            116u8, 82u8, 8u8, 111u8, 117u8, 116u8, 112u8, 111u8, 105u8, 110u8, 116u8,
-            18u8, 57u8, 10u8, 6u8, 111u8, 117u8, 116u8, 112u8, 117u8, 116u8, 24u8, 3u8,
-            32u8, 1u8, 40u8, 11u8, 50u8, 33u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8,
-            109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8,
-            49u8, 46u8, 68u8, 101u8, 112u8, 111u8, 115u8, 105u8, 116u8, 46u8, 79u8,
-            117u8, 116u8, 112u8, 117u8, 116u8, 82u8, 6u8, 111u8, 117u8, 116u8, 112u8,
-            117u8, 116u8, 26u8, 116u8, 10u8, 6u8, 79u8, 117u8, 116u8, 112u8, 117u8,
-            116u8, 18u8, 45u8, 10u8, 7u8, 97u8, 100u8, 100u8, 114u8, 101u8, 115u8, 115u8,
-            24u8, 2u8, 32u8, 1u8, 40u8, 11u8, 50u8, 19u8, 46u8, 99u8, 117u8, 115u8,
-            102u8, 46u8, 99u8, 111u8, 109u8, 109u8, 111u8, 110u8, 46u8, 118u8, 49u8,
-            46u8, 72u8, 101u8, 120u8, 82u8, 7u8, 97u8, 100u8, 100u8, 114u8, 101u8, 115u8,
-            115u8, 18u8, 59u8, 10u8, 10u8, 118u8, 97u8, 108u8, 117u8, 101u8, 95u8, 115u8,
-            97u8, 116u8, 115u8, 24u8, 3u8, 32u8, 1u8, 40u8, 11u8, 50u8, 28u8, 46u8,
-            103u8, 111u8, 111u8, 103u8, 108u8, 101u8, 46u8, 112u8, 114u8, 111u8, 116u8,
-            111u8, 98u8, 117u8, 102u8, 46u8, 85u8, 73u8, 110u8, 116u8, 54u8, 52u8, 86u8,
-            97u8, 108u8, 117u8, 101u8, 82u8, 9u8, 118u8, 97u8, 108u8, 117u8, 101u8, 83u8,
-            97u8, 116u8, 115u8, 34u8, 211u8, 4u8, 10u8, 21u8, 87u8, 105u8, 116u8, 104u8,
-            100u8, 114u8, 97u8, 119u8, 97u8, 108u8, 66u8, 117u8, 110u8, 100u8, 108u8,
-            101u8, 69u8, 118u8, 101u8, 110u8, 116u8, 18u8, 48u8, 10u8, 4u8, 109u8, 54u8,
-            105u8, 100u8, 24u8, 1u8, 32u8, 1u8, 40u8, 11u8, 50u8, 28u8, 46u8, 99u8,
-            117u8, 115u8, 102u8, 46u8, 99u8, 111u8, 109u8, 109u8, 111u8, 110u8, 46u8,
-            118u8, 49u8, 46u8, 67u8, 111u8, 110u8, 115u8, 101u8, 110u8, 115u8, 117u8,
-            115u8, 72u8, 101u8, 120u8, 82u8, 4u8, 109u8, 54u8, 105u8, 100u8, 18u8, 68u8,
-            10u8, 5u8, 101u8, 118u8, 101u8, 110u8, 116u8, 24u8, 2u8, 32u8, 1u8, 40u8,
-            11u8, 50u8, 46u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8,
-            110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 87u8, 105u8,
-            116u8, 104u8, 100u8, 114u8, 97u8, 119u8, 97u8, 108u8, 66u8, 117u8, 110u8,
-            100u8, 108u8, 101u8, 69u8, 118u8, 101u8, 110u8, 116u8, 46u8, 69u8, 118u8,
-            101u8, 110u8, 116u8, 82u8, 5u8, 101u8, 118u8, 101u8, 110u8, 116u8, 26u8,
-            193u8, 3u8, 10u8, 5u8, 69u8, 118u8, 101u8, 110u8, 116u8, 18u8, 79u8, 10u8,
-            6u8, 102u8, 97u8, 105u8, 108u8, 101u8, 100u8, 24u8, 1u8, 32u8, 1u8, 40u8,
-            11u8, 50u8, 53u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8,
-            110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 87u8, 105u8,
-            116u8, 104u8, 100u8, 114u8, 97u8, 119u8, 97u8, 108u8, 66u8, 117u8, 110u8,
-            100u8, 108u8, 101u8, 69u8, 118u8, 101u8, 110u8, 116u8, 46u8, 69u8, 118u8,
-            101u8, 110u8, 116u8, 46u8, 70u8, 97u8, 105u8, 108u8, 101u8, 100u8, 72u8, 0u8,
-            82u8, 6u8, 102u8, 97u8, 105u8, 108u8, 101u8, 100u8, 18u8, 88u8, 10u8, 9u8,
-            115u8, 117u8, 99u8, 99u8, 101u8, 101u8, 100u8, 101u8, 100u8, 24u8, 2u8, 32u8,
-            1u8, 40u8, 11u8, 50u8, 56u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8,
-            97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8,
-            87u8, 105u8, 116u8, 104u8, 100u8, 114u8, 97u8, 119u8, 97u8, 108u8, 66u8,
-            117u8, 110u8, 100u8, 108u8, 101u8, 69u8, 118u8, 101u8, 110u8, 116u8, 46u8,
-            69u8, 118u8, 101u8, 110u8, 116u8, 46u8, 83u8, 117u8, 99u8, 99u8, 101u8,
-            101u8, 100u8, 101u8, 100u8, 72u8, 0u8, 82u8, 9u8, 115u8, 117u8, 99u8, 99u8,
-            101u8, 101u8, 100u8, 101u8, 100u8, 18u8, 88u8, 10u8, 9u8, 115u8, 117u8, 98u8,
-            109u8, 105u8, 116u8, 116u8, 101u8, 100u8, 24u8, 3u8, 32u8, 1u8, 40u8, 11u8,
-            50u8, 56u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8,
-            99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 87u8, 105u8, 116u8,
-            104u8, 100u8, 114u8, 97u8, 119u8, 97u8, 108u8, 66u8, 117u8, 110u8, 100u8,
-            108u8, 101u8, 69u8, 118u8, 101u8, 110u8, 116u8, 46u8, 69u8, 118u8, 101u8,
-            110u8, 116u8, 46u8, 83u8, 117u8, 98u8, 109u8, 105u8, 116u8, 116u8, 101u8,
-            100u8, 72u8, 0u8, 82u8, 9u8, 115u8, 117u8, 98u8, 109u8, 105u8, 116u8, 116u8,
-            101u8, 100u8, 26u8, 8u8, 10u8, 6u8, 70u8, 97u8, 105u8, 108u8, 101u8, 100u8,
-            26u8, 146u8, 1u8, 10u8, 9u8, 83u8, 117u8, 99u8, 99u8, 101u8, 101u8, 100u8,
-            101u8, 100u8, 18u8, 69u8, 10u8, 15u8, 115u8, 101u8, 113u8, 117u8, 101u8,
-            110u8, 99u8, 101u8, 95u8, 110u8, 117u8, 109u8, 98u8, 101u8, 114u8, 24u8, 1u8,
-            32u8, 1u8, 40u8, 11u8, 50u8, 28u8, 46u8, 103u8, 111u8, 111u8, 103u8, 108u8,
-            101u8, 46u8, 112u8, 114u8, 111u8, 116u8, 111u8, 98u8, 117u8, 102u8, 46u8,
-            85u8, 73u8, 110u8, 116u8, 54u8, 52u8, 86u8, 97u8, 108u8, 117u8, 101u8, 82u8,
-            14u8, 115u8, 101u8, 113u8, 117u8, 101u8, 110u8, 99u8, 101u8, 78u8, 117u8,
-            109u8, 98u8, 101u8, 114u8, 18u8, 62u8, 10u8, 11u8, 116u8, 114u8, 97u8, 110u8,
-            115u8, 97u8, 99u8, 116u8, 105u8, 111u8, 110u8, 24u8, 2u8, 32u8, 1u8, 40u8,
-            11u8, 50u8, 28u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 99u8, 111u8, 109u8,
-            109u8, 111u8, 110u8, 46u8, 118u8, 49u8, 46u8, 67u8, 111u8, 110u8, 115u8,
-            101u8, 110u8, 115u8, 117u8, 115u8, 72u8, 101u8, 120u8, 82u8, 11u8, 116u8,
-            114u8, 97u8, 110u8, 115u8, 97u8, 99u8, 116u8, 105u8, 111u8, 110u8, 26u8,
-            11u8, 10u8, 9u8, 83u8, 117u8, 98u8, 109u8, 105u8, 116u8, 116u8, 101u8, 100u8,
-            66u8, 7u8, 10u8, 5u8, 101u8, 118u8, 101u8, 110u8, 116u8, 34u8, 200u8, 2u8,
-            10u8, 9u8, 66u8, 108u8, 111u8, 99u8, 107u8, 73u8, 110u8, 102u8, 111u8, 18u8,
-            72u8, 10u8, 14u8, 98u8, 109u8, 109u8, 95u8, 99u8, 111u8, 109u8, 109u8, 105u8,
-            116u8, 109u8, 101u8, 110u8, 116u8, 24u8, 1u8, 32u8, 1u8, 40u8, 11u8, 50u8,
+            6u8, 112u8, 114u8, 111u8, 116u8, 111u8, 51u8, 10u8, 157u8, 130u8, 1u8, 10u8,
+            33u8, 99u8, 117u8, 115u8, 102u8, 47u8, 109u8, 97u8, 105u8, 110u8, 99u8,
+            104u8, 97u8, 105u8, 110u8, 47u8, 118u8, 49u8, 47u8, 118u8, 97u8, 108u8,
+            105u8, 100u8, 97u8, 116u8, 111u8, 114u8, 46u8, 112u8, 114u8, 111u8, 116u8,
+            111u8, 18u8, 17u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8,
+            110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 26u8, 27u8, 99u8,
+            117u8, 115u8, 102u8, 47u8, 99u8, 111u8, 109u8, 109u8, 111u8, 110u8, 47u8,
+            118u8, 49u8, 47u8, 99u8, 111u8, 109u8, 109u8, 111u8, 110u8, 46u8, 112u8,
+            114u8, 111u8, 116u8, 111u8, 26u8, 30u8, 99u8, 117u8, 115u8, 102u8, 47u8,
+            109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 47u8, 118u8,
+            49u8, 47u8, 99u8, 111u8, 109u8, 109u8, 111u8, 110u8, 46u8, 112u8, 114u8,
+            111u8, 116u8, 111u8, 26u8, 30u8, 103u8, 111u8, 111u8, 103u8, 108u8, 101u8,
+            47u8, 112u8, 114u8, 111u8, 116u8, 111u8, 98u8, 117u8, 102u8, 47u8, 119u8,
+            114u8, 97u8, 112u8, 112u8, 101u8, 114u8, 115u8, 46u8, 112u8, 114u8, 111u8,
+            116u8, 111u8, 34u8, 191u8, 2u8, 10u8, 15u8, 66u8, 108u8, 111u8, 99u8, 107u8,
+            72u8, 101u8, 97u8, 100u8, 101u8, 114u8, 73u8, 110u8, 102u8, 111u8, 18u8,
+            57u8, 10u8, 10u8, 98u8, 108u8, 111u8, 99u8, 107u8, 95u8, 104u8, 97u8, 115u8,
+            104u8, 24u8, 1u8, 32u8, 1u8, 40u8, 11u8, 50u8, 26u8, 46u8, 99u8, 117u8,
+            115u8, 102u8, 46u8, 99u8, 111u8, 109u8, 109u8, 111u8, 110u8, 46u8, 118u8,
+            49u8, 46u8, 82u8, 101u8, 118u8, 101u8, 114u8, 115u8, 101u8, 72u8, 101u8,
+            120u8, 82u8, 9u8, 98u8, 108u8, 111u8, 99u8, 107u8, 72u8, 97u8, 115u8, 104u8,
+            18u8, 66u8, 10u8, 15u8, 112u8, 114u8, 101u8, 118u8, 95u8, 98u8, 108u8, 111u8,
+            99u8, 107u8, 95u8, 104u8, 97u8, 115u8, 104u8, 24u8, 2u8, 32u8, 1u8, 40u8,
+            11u8, 50u8, 26u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 99u8, 111u8, 109u8,
+            109u8, 111u8, 110u8, 46u8, 118u8, 49u8, 46u8, 82u8, 101u8, 118u8, 101u8,
+            114u8, 115u8, 101u8, 72u8, 101u8, 120u8, 82u8, 13u8, 112u8, 114u8, 101u8,
+            118u8, 66u8, 108u8, 111u8, 99u8, 107u8, 72u8, 97u8, 115u8, 104u8, 18u8, 22u8,
+            10u8, 6u8, 104u8, 101u8, 105u8, 103u8, 104u8, 116u8, 24u8, 3u8, 32u8, 1u8,
+            40u8, 13u8, 82u8, 6u8, 104u8, 101u8, 105u8, 103u8, 104u8, 116u8, 18u8, 48u8,
+            10u8, 4u8, 119u8, 111u8, 114u8, 107u8, 24u8, 4u8, 32u8, 1u8, 40u8, 11u8,
+            50u8, 28u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 99u8, 111u8, 109u8, 109u8,
+            111u8, 110u8, 46u8, 118u8, 49u8, 46u8, 67u8, 111u8, 110u8, 115u8, 101u8,
+            110u8, 115u8, 117u8, 115u8, 72u8, 101u8, 120u8, 82u8, 4u8, 119u8, 111u8,
+            114u8, 107u8, 18u8, 28u8, 10u8, 9u8, 116u8, 105u8, 109u8, 101u8, 115u8,
+            116u8, 97u8, 109u8, 112u8, 24u8, 5u8, 32u8, 1u8, 40u8, 4u8, 82u8, 9u8, 116u8,
+            105u8, 109u8, 101u8, 115u8, 116u8, 97u8, 109u8, 112u8, 18u8, 69u8, 10u8,
+            15u8, 99u8, 117u8, 109u8, 117u8, 108u8, 97u8, 116u8, 105u8, 118u8, 101u8,
+            95u8, 119u8, 111u8, 114u8, 107u8, 24u8, 6u8, 32u8, 1u8, 40u8, 11u8, 50u8,
             28u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 99u8, 111u8, 109u8, 109u8,
             111u8, 110u8, 46u8, 118u8, 49u8, 46u8, 67u8, 111u8, 110u8, 115u8, 101u8,
-            110u8, 115u8, 117u8, 115u8, 72u8, 101u8, 120u8, 72u8, 0u8, 82u8, 13u8, 98u8,
-            109u8, 109u8, 67u8, 111u8, 109u8, 109u8, 105u8, 116u8, 109u8, 101u8, 110u8,
-            116u8, 136u8, 1u8, 1u8, 18u8, 58u8, 10u8, 6u8, 101u8, 118u8, 101u8, 110u8,
-            116u8, 115u8, 24u8, 2u8, 32u8, 3u8, 40u8, 11u8, 50u8, 34u8, 46u8, 99u8,
-            117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8,
-            105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 66u8, 108u8, 111u8, 99u8, 107u8, 73u8,
-            110u8, 102u8, 111u8, 46u8, 69u8, 118u8, 101u8, 110u8, 116u8, 82u8, 6u8,
-            101u8, 118u8, 101u8, 110u8, 116u8, 115u8, 26u8, 161u8, 1u8, 10u8, 5u8, 69u8,
-            118u8, 101u8, 110u8, 116u8, 18u8, 54u8, 10u8, 7u8, 100u8, 101u8, 112u8,
-            111u8, 115u8, 105u8, 116u8, 24u8, 1u8, 32u8, 1u8, 40u8, 11u8, 50u8, 26u8,
-            46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8,
-            104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 68u8, 101u8, 112u8,
-            111u8, 115u8, 105u8, 116u8, 72u8, 0u8, 82u8, 7u8, 100u8, 101u8, 112u8, 111u8,
-            115u8, 105u8, 116u8, 18u8, 87u8, 10u8, 17u8, 119u8, 105u8, 116u8, 104u8,
-            100u8, 114u8, 97u8, 119u8, 97u8, 108u8, 95u8, 98u8, 117u8, 110u8, 100u8,
-            108u8, 101u8, 24u8, 2u8, 32u8, 1u8, 40u8, 11u8, 50u8, 40u8, 46u8, 99u8,
-            117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8,
-            105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 87u8, 105u8, 116u8, 104u8, 100u8,
-            114u8, 97u8, 119u8, 97u8, 108u8, 66u8, 117u8, 110u8, 100u8, 108u8, 101u8,
-            69u8, 118u8, 101u8, 110u8, 116u8, 72u8, 0u8, 82u8, 16u8, 119u8, 105u8, 116u8,
+            110u8, 115u8, 117u8, 115u8, 72u8, 101u8, 120u8, 82u8, 14u8, 99u8, 117u8,
+            109u8, 117u8, 108u8, 97u8, 116u8, 105u8, 118u8, 101u8, 87u8, 111u8, 114u8,
+            107u8, 34u8, 186u8, 2u8, 10u8, 7u8, 68u8, 101u8, 112u8, 111u8, 115u8, 105u8,
+            116u8, 18u8, 69u8, 10u8, 15u8, 115u8, 101u8, 113u8, 117u8, 101u8, 110u8,
+            99u8, 101u8, 95u8, 110u8, 117u8, 109u8, 98u8, 101u8, 114u8, 24u8, 1u8, 32u8,
+            1u8, 40u8, 11u8, 50u8, 28u8, 46u8, 103u8, 111u8, 111u8, 103u8, 108u8, 101u8,
+            46u8, 112u8, 114u8, 111u8, 116u8, 111u8, 98u8, 117u8, 102u8, 46u8, 85u8,
+            73u8, 110u8, 116u8, 54u8, 52u8, 86u8, 97u8, 108u8, 117u8, 101u8, 82u8, 14u8,
+            115u8, 101u8, 113u8, 117u8, 101u8, 110u8, 99u8, 101u8, 78u8, 117u8, 109u8,
+            98u8, 101u8, 114u8, 18u8, 55u8, 10u8, 8u8, 111u8, 117u8, 116u8, 112u8, 111u8,
+            105u8, 110u8, 116u8, 24u8, 2u8, 32u8, 1u8, 40u8, 11u8, 50u8, 27u8, 46u8,
+            99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8,
+            97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 79u8, 117u8, 116u8, 80u8, 111u8,
+            105u8, 110u8, 116u8, 82u8, 8u8, 111u8, 117u8, 116u8, 112u8, 111u8, 105u8,
+            110u8, 116u8, 18u8, 57u8, 10u8, 6u8, 111u8, 117u8, 116u8, 112u8, 117u8,
+            116u8, 24u8, 3u8, 32u8, 1u8, 40u8, 11u8, 50u8, 33u8, 46u8, 99u8, 117u8,
+            115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8,
+            110u8, 46u8, 118u8, 49u8, 46u8, 68u8, 101u8, 112u8, 111u8, 115u8, 105u8,
+            116u8, 46u8, 79u8, 117u8, 116u8, 112u8, 117u8, 116u8, 82u8, 6u8, 111u8,
+            117u8, 116u8, 112u8, 117u8, 116u8, 26u8, 116u8, 10u8, 6u8, 79u8, 117u8,
+            116u8, 112u8, 117u8, 116u8, 18u8, 45u8, 10u8, 7u8, 97u8, 100u8, 100u8, 114u8,
+            101u8, 115u8, 115u8, 24u8, 2u8, 32u8, 1u8, 40u8, 11u8, 50u8, 19u8, 46u8,
+            99u8, 117u8, 115u8, 102u8, 46u8, 99u8, 111u8, 109u8, 109u8, 111u8, 110u8,
+            46u8, 118u8, 49u8, 46u8, 72u8, 101u8, 120u8, 82u8, 7u8, 97u8, 100u8, 100u8,
+            114u8, 101u8, 115u8, 115u8, 18u8, 59u8, 10u8, 10u8, 118u8, 97u8, 108u8,
+            117u8, 101u8, 95u8, 115u8, 97u8, 116u8, 115u8, 24u8, 3u8, 32u8, 1u8, 40u8,
+            11u8, 50u8, 28u8, 46u8, 103u8, 111u8, 111u8, 103u8, 108u8, 101u8, 46u8,
+            112u8, 114u8, 111u8, 116u8, 111u8, 98u8, 117u8, 102u8, 46u8, 85u8, 73u8,
+            110u8, 116u8, 54u8, 52u8, 86u8, 97u8, 108u8, 117u8, 101u8, 82u8, 9u8, 118u8,
+            97u8, 108u8, 117u8, 101u8, 83u8, 97u8, 116u8, 115u8, 34u8, 211u8, 4u8, 10u8,
+            21u8, 87u8, 105u8, 116u8, 104u8, 100u8, 114u8, 97u8, 119u8, 97u8, 108u8,
+            66u8, 117u8, 110u8, 100u8, 108u8, 101u8, 69u8, 118u8, 101u8, 110u8, 116u8,
+            18u8, 48u8, 10u8, 4u8, 109u8, 54u8, 105u8, 100u8, 24u8, 1u8, 32u8, 1u8, 40u8,
+            11u8, 50u8, 28u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 99u8, 111u8, 109u8,
+            109u8, 111u8, 110u8, 46u8, 118u8, 49u8, 46u8, 67u8, 111u8, 110u8, 115u8,
+            101u8, 110u8, 115u8, 117u8, 115u8, 72u8, 101u8, 120u8, 82u8, 4u8, 109u8,
+            54u8, 105u8, 100u8, 18u8, 68u8, 10u8, 5u8, 101u8, 118u8, 101u8, 110u8, 116u8,
+            24u8, 2u8, 32u8, 1u8, 40u8, 11u8, 50u8, 46u8, 46u8, 99u8, 117u8, 115u8,
+            102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8,
+            46u8, 118u8, 49u8, 46u8, 87u8, 105u8, 116u8, 104u8, 100u8, 114u8, 97u8,
+            119u8, 97u8, 108u8, 66u8, 117u8, 110u8, 100u8, 108u8, 101u8, 69u8, 118u8,
+            101u8, 110u8, 116u8, 46u8, 69u8, 118u8, 101u8, 110u8, 116u8, 82u8, 5u8,
+            101u8, 118u8, 101u8, 110u8, 116u8, 26u8, 193u8, 3u8, 10u8, 5u8, 69u8, 118u8,
+            101u8, 110u8, 116u8, 18u8, 79u8, 10u8, 6u8, 102u8, 97u8, 105u8, 108u8, 101u8,
+            100u8, 24u8, 1u8, 32u8, 1u8, 40u8, 11u8, 50u8, 53u8, 46u8, 99u8, 117u8,
+            115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8,
+            110u8, 46u8, 118u8, 49u8, 46u8, 87u8, 105u8, 116u8, 104u8, 100u8, 114u8,
+            97u8, 119u8, 97u8, 108u8, 66u8, 117u8, 110u8, 100u8, 108u8, 101u8, 69u8,
+            118u8, 101u8, 110u8, 116u8, 46u8, 69u8, 118u8, 101u8, 110u8, 116u8, 46u8,
+            70u8, 97u8, 105u8, 108u8, 101u8, 100u8, 72u8, 0u8, 82u8, 6u8, 102u8, 97u8,
+            105u8, 108u8, 101u8, 100u8, 18u8, 88u8, 10u8, 9u8, 115u8, 117u8, 99u8, 99u8,
+            101u8, 101u8, 100u8, 101u8, 100u8, 24u8, 2u8, 32u8, 1u8, 40u8, 11u8, 50u8,
+            56u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8,
+            104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 87u8, 105u8, 116u8,
+            104u8, 100u8, 114u8, 97u8, 119u8, 97u8, 108u8, 66u8, 117u8, 110u8, 100u8,
+            108u8, 101u8, 69u8, 118u8, 101u8, 110u8, 116u8, 46u8, 69u8, 118u8, 101u8,
+            110u8, 116u8, 46u8, 83u8, 117u8, 99u8, 99u8, 101u8, 101u8, 100u8, 101u8,
+            100u8, 72u8, 0u8, 82u8, 9u8, 115u8, 117u8, 99u8, 99u8, 101u8, 101u8, 100u8,
+            101u8, 100u8, 18u8, 88u8, 10u8, 9u8, 115u8, 117u8, 98u8, 109u8, 105u8, 116u8,
+            116u8, 101u8, 100u8, 24u8, 3u8, 32u8, 1u8, 40u8, 11u8, 50u8, 56u8, 46u8,
+            99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8,
+            97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 87u8, 105u8, 116u8, 104u8,
+            100u8, 114u8, 97u8, 119u8, 97u8, 108u8, 66u8, 117u8, 110u8, 100u8, 108u8,
+            101u8, 69u8, 118u8, 101u8, 110u8, 116u8, 46u8, 69u8, 118u8, 101u8, 110u8,
+            116u8, 46u8, 83u8, 117u8, 98u8, 109u8, 105u8, 116u8, 116u8, 101u8, 100u8,
+            72u8, 0u8, 82u8, 9u8, 115u8, 117u8, 98u8, 109u8, 105u8, 116u8, 116u8, 101u8,
+            100u8, 26u8, 8u8, 10u8, 6u8, 70u8, 97u8, 105u8, 108u8, 101u8, 100u8, 26u8,
+            146u8, 1u8, 10u8, 9u8, 83u8, 117u8, 99u8, 99u8, 101u8, 101u8, 100u8, 101u8,
+            100u8, 18u8, 69u8, 10u8, 15u8, 115u8, 101u8, 113u8, 117u8, 101u8, 110u8,
+            99u8, 101u8, 95u8, 110u8, 117u8, 109u8, 98u8, 101u8, 114u8, 24u8, 1u8, 32u8,
+            1u8, 40u8, 11u8, 50u8, 28u8, 46u8, 103u8, 111u8, 111u8, 103u8, 108u8, 101u8,
+            46u8, 112u8, 114u8, 111u8, 116u8, 111u8, 98u8, 117u8, 102u8, 46u8, 85u8,
+            73u8, 110u8, 116u8, 54u8, 52u8, 86u8, 97u8, 108u8, 117u8, 101u8, 82u8, 14u8,
+            115u8, 101u8, 113u8, 117u8, 101u8, 110u8, 99u8, 101u8, 78u8, 117u8, 109u8,
+            98u8, 101u8, 114u8, 18u8, 62u8, 10u8, 11u8, 116u8, 114u8, 97u8, 110u8, 115u8,
+            97u8, 99u8, 116u8, 105u8, 111u8, 110u8, 24u8, 2u8, 32u8, 1u8, 40u8, 11u8,
+            50u8, 28u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 99u8, 111u8, 109u8, 109u8,
+            111u8, 110u8, 46u8, 118u8, 49u8, 46u8, 67u8, 111u8, 110u8, 115u8, 101u8,
+            110u8, 115u8, 117u8, 115u8, 72u8, 101u8, 120u8, 82u8, 11u8, 116u8, 114u8,
+            97u8, 110u8, 115u8, 97u8, 99u8, 116u8, 105u8, 111u8, 110u8, 26u8, 11u8, 10u8,
+            9u8, 83u8, 117u8, 98u8, 109u8, 105u8, 116u8, 116u8, 101u8, 100u8, 66u8, 7u8,
+            10u8, 5u8, 101u8, 118u8, 101u8, 110u8, 116u8, 34u8, 200u8, 2u8, 10u8, 9u8,
+            66u8, 108u8, 111u8, 99u8, 107u8, 73u8, 110u8, 102u8, 111u8, 18u8, 72u8, 10u8,
+            14u8, 98u8, 109u8, 109u8, 95u8, 99u8, 111u8, 109u8, 109u8, 105u8, 116u8,
+            109u8, 101u8, 110u8, 116u8, 24u8, 1u8, 32u8, 1u8, 40u8, 11u8, 50u8, 28u8,
+            46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 99u8, 111u8, 109u8, 109u8, 111u8,
+            110u8, 46u8, 118u8, 49u8, 46u8, 67u8, 111u8, 110u8, 115u8, 101u8, 110u8,
+            115u8, 117u8, 115u8, 72u8, 101u8, 120u8, 72u8, 0u8, 82u8, 13u8, 98u8, 109u8,
+            109u8, 67u8, 111u8, 109u8, 109u8, 105u8, 116u8, 109u8, 101u8, 110u8, 116u8,
+            136u8, 1u8, 1u8, 18u8, 58u8, 10u8, 6u8, 101u8, 118u8, 101u8, 110u8, 116u8,
+            115u8, 24u8, 2u8, 32u8, 3u8, 40u8, 11u8, 50u8, 34u8, 46u8, 99u8, 117u8,
+            115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8,
+            110u8, 46u8, 118u8, 49u8, 46u8, 66u8, 108u8, 111u8, 99u8, 107u8, 73u8, 110u8,
+            102u8, 111u8, 46u8, 69u8, 118u8, 101u8, 110u8, 116u8, 82u8, 6u8, 101u8,
+            118u8, 101u8, 110u8, 116u8, 115u8, 26u8, 161u8, 1u8, 10u8, 5u8, 69u8, 118u8,
+            101u8, 110u8, 116u8, 18u8, 54u8, 10u8, 7u8, 100u8, 101u8, 112u8, 111u8,
+            115u8, 105u8, 116u8, 24u8, 1u8, 32u8, 1u8, 40u8, 11u8, 50u8, 26u8, 46u8,
+            99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8,
+            97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 68u8, 101u8, 112u8, 111u8,
+            115u8, 105u8, 116u8, 72u8, 0u8, 82u8, 7u8, 100u8, 101u8, 112u8, 111u8, 115u8,
+            105u8, 116u8, 18u8, 87u8, 10u8, 17u8, 119u8, 105u8, 116u8, 104u8, 100u8,
+            114u8, 97u8, 119u8, 97u8, 108u8, 95u8, 98u8, 117u8, 110u8, 100u8, 108u8,
+            101u8, 24u8, 2u8, 32u8, 1u8, 40u8, 11u8, 50u8, 40u8, 46u8, 99u8, 117u8,
+            115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8,
+            110u8, 46u8, 118u8, 49u8, 46u8, 87u8, 105u8, 116u8, 104u8, 100u8, 114u8,
+            97u8, 119u8, 97u8, 108u8, 66u8, 117u8, 110u8, 100u8, 108u8, 101u8, 69u8,
+            118u8, 101u8, 110u8, 116u8, 72u8, 0u8, 82u8, 16u8, 119u8, 105u8, 116u8,
             104u8, 100u8, 114u8, 97u8, 119u8, 97u8, 108u8, 66u8, 117u8, 110u8, 100u8,
             108u8, 101u8, 66u8, 7u8, 10u8, 5u8, 101u8, 118u8, 101u8, 110u8, 116u8, 66u8,
             17u8, 10u8, 15u8, 95u8, 98u8, 109u8, 109u8, 95u8, 99u8, 111u8, 109u8, 109u8,
@@ -83952,7 +87304,7 @@ pub mod __buffa {
             82u8, 16u8, 97u8, 99u8, 116u8, 105u8, 118u8, 97u8, 116u8, 105u8, 111u8,
             110u8, 72u8, 101u8, 105u8, 103u8, 104u8, 116u8, 34u8, 20u8, 10u8, 18u8, 71u8,
             101u8, 116u8, 67u8, 104u8, 97u8, 105u8, 110u8, 84u8, 105u8, 112u8, 82u8,
-            101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 34u8, 101u8, 10u8, 19u8, 71u8,
+            101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 34u8, 183u8, 1u8, 10u8, 19u8, 71u8,
             101u8, 116u8, 67u8, 104u8, 97u8, 105u8, 110u8, 84u8, 105u8, 112u8, 82u8,
             101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 18u8, 78u8, 10u8, 17u8,
             98u8, 108u8, 111u8, 99u8, 107u8, 95u8, 104u8, 101u8, 97u8, 100u8, 101u8,
@@ -83961,98 +87313,105 @@ pub mod __buffa {
             99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 66u8, 108u8, 111u8,
             99u8, 107u8, 72u8, 101u8, 97u8, 100u8, 101u8, 114u8, 73u8, 110u8, 102u8,
             111u8, 82u8, 15u8, 98u8, 108u8, 111u8, 99u8, 107u8, 72u8, 101u8, 97u8, 100u8,
-            101u8, 114u8, 73u8, 110u8, 102u8, 111u8, 34u8, 238u8, 9u8, 10u8, 22u8, 71u8,
-            101u8, 116u8, 67u8, 111u8, 105u8, 110u8, 98u8, 97u8, 115u8, 101u8, 80u8,
-            83u8, 66u8, 84u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 18u8,
-            105u8, 10u8, 18u8, 112u8, 114u8, 111u8, 112u8, 111u8, 115u8, 101u8, 95u8,
-            115u8, 105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 115u8, 24u8,
-            1u8, 32u8, 3u8, 40u8, 11u8, 50u8, 58u8, 46u8, 99u8, 117u8, 115u8, 102u8,
-            46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8,
-            118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8, 111u8, 105u8, 110u8, 98u8, 97u8,
-            115u8, 101u8, 80u8, 83u8, 66u8, 84u8, 82u8, 101u8, 113u8, 117u8, 101u8,
-            115u8, 116u8, 46u8, 80u8, 114u8, 111u8, 112u8, 111u8, 115u8, 101u8, 83u8,
-            105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 82u8, 17u8, 112u8,
-            114u8, 111u8, 112u8, 111u8, 115u8, 101u8, 83u8, 105u8, 100u8, 101u8, 99u8,
-            104u8, 97u8, 105u8, 110u8, 115u8, 18u8, 93u8, 10u8, 14u8, 97u8, 99u8, 107u8,
-            95u8, 115u8, 105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 115u8,
-            24u8, 2u8, 32u8, 3u8, 40u8, 11u8, 50u8, 54u8, 46u8, 99u8, 117u8, 115u8,
-            102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8,
-            46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8, 111u8, 105u8, 110u8, 98u8,
-            97u8, 115u8, 101u8, 80u8, 83u8, 66u8, 84u8, 82u8, 101u8, 113u8, 117u8, 101u8,
-            115u8, 116u8, 46u8, 65u8, 99u8, 107u8, 83u8, 105u8, 100u8, 101u8, 99u8,
-            104u8, 97u8, 105u8, 110u8, 82u8, 13u8, 97u8, 99u8, 107u8, 83u8, 105u8, 100u8,
-            101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 115u8, 18u8, 96u8, 10u8, 15u8, 112u8,
-            114u8, 111u8, 112u8, 111u8, 115u8, 101u8, 95u8, 98u8, 117u8, 110u8, 100u8,
-            108u8, 101u8, 115u8, 24u8, 3u8, 32u8, 3u8, 40u8, 11u8, 50u8, 55u8, 46u8,
-            99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8,
-            97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8, 111u8,
-            105u8, 110u8, 98u8, 97u8, 115u8, 101u8, 80u8, 83u8, 66u8, 84u8, 82u8, 101u8,
-            113u8, 117u8, 101u8, 115u8, 116u8, 46u8, 80u8, 114u8, 111u8, 112u8, 111u8,
-            115u8, 101u8, 66u8, 117u8, 110u8, 100u8, 108u8, 101u8, 82u8, 14u8, 112u8,
-            114u8, 111u8, 112u8, 111u8, 115u8, 101u8, 66u8, 117u8, 110u8, 100u8, 108u8,
-            101u8, 115u8, 18u8, 85u8, 10u8, 11u8, 97u8, 99u8, 107u8, 95u8, 98u8, 117u8,
-            110u8, 100u8, 108u8, 101u8, 115u8, 24u8, 4u8, 32u8, 1u8, 40u8, 11u8, 50u8,
-            52u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8,
-            104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8,
-            111u8, 105u8, 110u8, 98u8, 97u8, 115u8, 101u8, 80u8, 83u8, 66u8, 84u8, 82u8,
-            101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 46u8, 65u8, 99u8, 107u8, 66u8,
-            117u8, 110u8, 100u8, 108u8, 101u8, 115u8, 82u8, 10u8, 97u8, 99u8, 107u8,
-            66u8, 117u8, 110u8, 100u8, 108u8, 101u8, 115u8, 26u8, 141u8, 1u8, 10u8, 16u8,
-            80u8, 114u8, 111u8, 112u8, 111u8, 115u8, 101u8, 83u8, 105u8, 100u8, 101u8,
-            99u8, 104u8, 97u8, 105u8, 110u8, 18u8, 71u8, 10u8, 16u8, 115u8, 105u8, 100u8,
-            101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 95u8, 110u8, 117u8, 109u8, 98u8,
-            101u8, 114u8, 24u8, 1u8, 32u8, 1u8, 40u8, 11u8, 50u8, 28u8, 46u8, 103u8,
-            111u8, 111u8, 103u8, 108u8, 101u8, 46u8, 112u8, 114u8, 111u8, 116u8, 111u8,
-            98u8, 117u8, 102u8, 46u8, 85u8, 73u8, 110u8, 116u8, 51u8, 50u8, 86u8, 97u8,
-            108u8, 117u8, 101u8, 82u8, 15u8, 115u8, 105u8, 100u8, 101u8, 99u8, 104u8,
-            97u8, 105u8, 110u8, 78u8, 117u8, 109u8, 98u8, 101u8, 114u8, 18u8, 48u8, 10u8,
-            4u8, 100u8, 97u8, 116u8, 97u8, 24u8, 2u8, 32u8, 1u8, 40u8, 11u8, 50u8, 28u8,
-            46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 99u8, 111u8, 109u8, 109u8, 111u8,
-            110u8, 46u8, 118u8, 49u8, 46u8, 67u8, 111u8, 110u8, 115u8, 101u8, 110u8,
-            115u8, 117u8, 115u8, 72u8, 101u8, 120u8, 82u8, 4u8, 100u8, 97u8, 116u8, 97u8,
-            26u8, 146u8, 1u8, 10u8, 12u8, 65u8, 99u8, 107u8, 83u8, 105u8, 100u8, 101u8,
-            99u8, 104u8, 97u8, 105u8, 110u8, 18u8, 71u8, 10u8, 16u8, 115u8, 105u8, 100u8,
-            101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 95u8, 110u8, 117u8, 109u8, 98u8,
-            101u8, 114u8, 24u8, 1u8, 32u8, 1u8, 40u8, 11u8, 50u8, 28u8, 46u8, 103u8,
-            111u8, 111u8, 103u8, 108u8, 101u8, 46u8, 112u8, 114u8, 111u8, 116u8, 111u8,
-            98u8, 117u8, 102u8, 46u8, 85u8, 73u8, 110u8, 116u8, 51u8, 50u8, 86u8, 97u8,
-            108u8, 117u8, 101u8, 82u8, 15u8, 115u8, 105u8, 100u8, 101u8, 99u8, 104u8,
-            97u8, 105u8, 110u8, 78u8, 117u8, 109u8, 98u8, 101u8, 114u8, 18u8, 57u8, 10u8,
-            9u8, 100u8, 97u8, 116u8, 97u8, 95u8, 104u8, 97u8, 115u8, 104u8, 24u8, 2u8,
-            32u8, 1u8, 40u8, 11u8, 50u8, 28u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8,
-            99u8, 111u8, 109u8, 109u8, 111u8, 110u8, 46u8, 118u8, 49u8, 46u8, 67u8,
-            111u8, 110u8, 115u8, 101u8, 110u8, 115u8, 117u8, 115u8, 72u8, 101u8, 120u8,
-            82u8, 8u8, 100u8, 97u8, 116u8, 97u8, 72u8, 97u8, 115u8, 104u8, 26u8, 149u8,
-            1u8, 10u8, 13u8, 80u8, 114u8, 111u8, 112u8, 111u8, 115u8, 101u8, 66u8, 117u8,
-            110u8, 100u8, 108u8, 101u8, 18u8, 71u8, 10u8, 16u8, 115u8, 105u8, 100u8,
-            101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 95u8, 110u8, 117u8, 109u8, 98u8,
-            101u8, 114u8, 24u8, 1u8, 32u8, 1u8, 40u8, 11u8, 50u8, 28u8, 46u8, 103u8,
-            111u8, 111u8, 103u8, 108u8, 101u8, 46u8, 112u8, 114u8, 111u8, 116u8, 111u8,
-            98u8, 117u8, 102u8, 46u8, 85u8, 73u8, 110u8, 116u8, 51u8, 50u8, 86u8, 97u8,
-            108u8, 117u8, 101u8, 82u8, 15u8, 115u8, 105u8, 100u8, 101u8, 99u8, 104u8,
-            97u8, 105u8, 110u8, 78u8, 117u8, 109u8, 98u8, 101u8, 114u8, 18u8, 59u8, 10u8,
-            11u8, 98u8, 117u8, 110u8, 100u8, 108u8, 101u8, 95u8, 116u8, 120u8, 105u8,
-            100u8, 24u8, 2u8, 32u8, 1u8, 40u8, 11u8, 50u8, 26u8, 46u8, 99u8, 117u8,
-            115u8, 102u8, 46u8, 99u8, 111u8, 109u8, 109u8, 111u8, 110u8, 46u8, 118u8,
-            49u8, 46u8, 82u8, 101u8, 118u8, 101u8, 114u8, 115u8, 101u8, 72u8, 101u8,
-            120u8, 82u8, 10u8, 98u8, 117u8, 110u8, 100u8, 108u8, 101u8, 84u8, 120u8,
-            105u8, 100u8, 26u8, 147u8, 3u8, 10u8, 10u8, 65u8, 99u8, 107u8, 66u8, 117u8,
-            110u8, 100u8, 108u8, 101u8, 115u8, 18u8, 110u8, 10u8, 15u8, 114u8, 101u8,
-            112u8, 101u8, 97u8, 116u8, 95u8, 112u8, 114u8, 101u8, 118u8, 105u8, 111u8,
-            117u8, 115u8, 24u8, 1u8, 32u8, 1u8, 40u8, 11u8, 50u8, 67u8, 46u8, 99u8,
+            101u8, 114u8, 73u8, 110u8, 102u8, 111u8, 18u8, 41u8, 10u8, 16u8, 111u8, 98u8,
+            115u8, 101u8, 114u8, 118u8, 101u8, 114u8, 95u8, 115u8, 101u8, 115u8, 115u8,
+            105u8, 111u8, 110u8, 24u8, 2u8, 32u8, 1u8, 40u8, 9u8, 82u8, 15u8, 111u8,
+            98u8, 115u8, 101u8, 114u8, 118u8, 101u8, 114u8, 83u8, 101u8, 115u8, 115u8,
+            105u8, 111u8, 110u8, 18u8, 37u8, 10u8, 14u8, 99u8, 104u8, 97u8, 105u8, 110u8,
+            95u8, 114u8, 101u8, 118u8, 105u8, 115u8, 105u8, 111u8, 110u8, 24u8, 3u8,
+            32u8, 1u8, 40u8, 4u8, 82u8, 13u8, 99u8, 104u8, 97u8, 105u8, 110u8, 82u8,
+            101u8, 118u8, 105u8, 115u8, 105u8, 111u8, 110u8, 34u8, 238u8, 9u8, 10u8,
+            22u8, 71u8, 101u8, 116u8, 67u8, 111u8, 105u8, 110u8, 98u8, 97u8, 115u8,
+            101u8, 80u8, 83u8, 66u8, 84u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8,
+            116u8, 18u8, 105u8, 10u8, 18u8, 112u8, 114u8, 111u8, 112u8, 111u8, 115u8,
+            101u8, 95u8, 115u8, 105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8,
+            115u8, 24u8, 1u8, 32u8, 3u8, 40u8, 11u8, 50u8, 58u8, 46u8, 99u8, 117u8,
+            115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8,
+            110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8, 111u8, 105u8,
+            110u8, 98u8, 97u8, 115u8, 101u8, 80u8, 83u8, 66u8, 84u8, 82u8, 101u8, 113u8,
+            117u8, 101u8, 115u8, 116u8, 46u8, 80u8, 114u8, 111u8, 112u8, 111u8, 115u8,
+            101u8, 83u8, 105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 82u8,
+            17u8, 112u8, 114u8, 111u8, 112u8, 111u8, 115u8, 101u8, 83u8, 105u8, 100u8,
+            101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 115u8, 18u8, 93u8, 10u8, 14u8, 97u8,
+            99u8, 107u8, 95u8, 115u8, 105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8,
+            110u8, 115u8, 24u8, 2u8, 32u8, 3u8, 40u8, 11u8, 50u8, 54u8, 46u8, 99u8,
             117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8,
             105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8, 111u8,
             105u8, 110u8, 98u8, 97u8, 115u8, 101u8, 80u8, 83u8, 66u8, 84u8, 82u8, 101u8,
-            113u8, 117u8, 101u8, 115u8, 116u8, 46u8, 65u8, 99u8, 107u8, 66u8, 117u8,
-            110u8, 100u8, 108u8, 101u8, 115u8, 46u8, 82u8, 101u8, 112u8, 101u8, 97u8,
-            116u8, 80u8, 114u8, 101u8, 118u8, 105u8, 111u8, 117u8, 115u8, 72u8, 0u8,
-            82u8, 14u8, 114u8, 101u8, 112u8, 101u8, 97u8, 116u8, 80u8, 114u8, 101u8,
-            118u8, 105u8, 111u8, 117u8, 115u8, 18u8, 102u8, 10u8, 13u8, 108u8, 101u8,
-            97u8, 100u8, 105u8, 110u8, 103u8, 95u8, 98u8, 121u8, 95u8, 53u8, 48u8, 24u8,
-            2u8, 32u8, 1u8, 40u8, 11u8, 50u8, 64u8, 46u8, 99u8, 117u8, 115u8, 102u8,
-            46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8,
-            118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8, 111u8, 105u8, 110u8, 98u8, 97u8,
-            115u8, 101u8, 80u8, 83u8, 66u8, 84u8, 82u8, 101u8, 113u8, 117u8, 101u8,
+            113u8, 117u8, 101u8, 115u8, 116u8, 46u8, 65u8, 99u8, 107u8, 83u8, 105u8,
+            100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 82u8, 13u8, 97u8, 99u8, 107u8,
+            83u8, 105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 115u8, 18u8,
+            96u8, 10u8, 15u8, 112u8, 114u8, 111u8, 112u8, 111u8, 115u8, 101u8, 95u8,
+            98u8, 117u8, 110u8, 100u8, 108u8, 101u8, 115u8, 24u8, 3u8, 32u8, 3u8, 40u8,
+            11u8, 50u8, 55u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8,
+            110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8,
+            116u8, 67u8, 111u8, 105u8, 110u8, 98u8, 97u8, 115u8, 101u8, 80u8, 83u8, 66u8,
+            84u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 46u8, 80u8, 114u8,
+            111u8, 112u8, 111u8, 115u8, 101u8, 66u8, 117u8, 110u8, 100u8, 108u8, 101u8,
+            82u8, 14u8, 112u8, 114u8, 111u8, 112u8, 111u8, 115u8, 101u8, 66u8, 117u8,
+            110u8, 100u8, 108u8, 101u8, 115u8, 18u8, 85u8, 10u8, 11u8, 97u8, 99u8, 107u8,
+            95u8, 98u8, 117u8, 110u8, 100u8, 108u8, 101u8, 115u8, 24u8, 4u8, 32u8, 1u8,
+            40u8, 11u8, 50u8, 52u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8,
+            105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8,
+            101u8, 116u8, 67u8, 111u8, 105u8, 110u8, 98u8, 97u8, 115u8, 101u8, 80u8,
+            83u8, 66u8, 84u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 46u8, 65u8,
+            99u8, 107u8, 66u8, 117u8, 110u8, 100u8, 108u8, 101u8, 115u8, 82u8, 10u8,
+            97u8, 99u8, 107u8, 66u8, 117u8, 110u8, 100u8, 108u8, 101u8, 115u8, 26u8,
+            141u8, 1u8, 10u8, 16u8, 80u8, 114u8, 111u8, 112u8, 111u8, 115u8, 101u8, 83u8,
+            105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 18u8, 71u8, 10u8, 16u8,
+            115u8, 105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 95u8, 110u8,
+            117u8, 109u8, 98u8, 101u8, 114u8, 24u8, 1u8, 32u8, 1u8, 40u8, 11u8, 50u8,
+            28u8, 46u8, 103u8, 111u8, 111u8, 103u8, 108u8, 101u8, 46u8, 112u8, 114u8,
+            111u8, 116u8, 111u8, 98u8, 117u8, 102u8, 46u8, 85u8, 73u8, 110u8, 116u8,
+            51u8, 50u8, 86u8, 97u8, 108u8, 117u8, 101u8, 82u8, 15u8, 115u8, 105u8, 100u8,
+            101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 78u8, 117u8, 109u8, 98u8, 101u8,
+            114u8, 18u8, 48u8, 10u8, 4u8, 100u8, 97u8, 116u8, 97u8, 24u8, 2u8, 32u8, 1u8,
+            40u8, 11u8, 50u8, 28u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 99u8, 111u8,
+            109u8, 109u8, 111u8, 110u8, 46u8, 118u8, 49u8, 46u8, 67u8, 111u8, 110u8,
+            115u8, 101u8, 110u8, 115u8, 117u8, 115u8, 72u8, 101u8, 120u8, 82u8, 4u8,
+            100u8, 97u8, 116u8, 97u8, 26u8, 146u8, 1u8, 10u8, 12u8, 65u8, 99u8, 107u8,
+            83u8, 105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 18u8, 71u8, 10u8,
+            16u8, 115u8, 105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 95u8,
+            110u8, 117u8, 109u8, 98u8, 101u8, 114u8, 24u8, 1u8, 32u8, 1u8, 40u8, 11u8,
+            50u8, 28u8, 46u8, 103u8, 111u8, 111u8, 103u8, 108u8, 101u8, 46u8, 112u8,
+            114u8, 111u8, 116u8, 111u8, 98u8, 117u8, 102u8, 46u8, 85u8, 73u8, 110u8,
+            116u8, 51u8, 50u8, 86u8, 97u8, 108u8, 117u8, 101u8, 82u8, 15u8, 115u8, 105u8,
+            100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 78u8, 117u8, 109u8, 98u8,
+            101u8, 114u8, 18u8, 57u8, 10u8, 9u8, 100u8, 97u8, 116u8, 97u8, 95u8, 104u8,
+            97u8, 115u8, 104u8, 24u8, 2u8, 32u8, 1u8, 40u8, 11u8, 50u8, 28u8, 46u8, 99u8,
+            117u8, 115u8, 102u8, 46u8, 99u8, 111u8, 109u8, 109u8, 111u8, 110u8, 46u8,
+            118u8, 49u8, 46u8, 67u8, 111u8, 110u8, 115u8, 101u8, 110u8, 115u8, 117u8,
+            115u8, 72u8, 101u8, 120u8, 82u8, 8u8, 100u8, 97u8, 116u8, 97u8, 72u8, 97u8,
+            115u8, 104u8, 26u8, 149u8, 1u8, 10u8, 13u8, 80u8, 114u8, 111u8, 112u8, 111u8,
+            115u8, 101u8, 66u8, 117u8, 110u8, 100u8, 108u8, 101u8, 18u8, 71u8, 10u8,
+            16u8, 115u8, 105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 95u8,
+            110u8, 117u8, 109u8, 98u8, 101u8, 114u8, 24u8, 1u8, 32u8, 1u8, 40u8, 11u8,
+            50u8, 28u8, 46u8, 103u8, 111u8, 111u8, 103u8, 108u8, 101u8, 46u8, 112u8,
+            114u8, 111u8, 116u8, 111u8, 98u8, 117u8, 102u8, 46u8, 85u8, 73u8, 110u8,
+            116u8, 51u8, 50u8, 86u8, 97u8, 108u8, 117u8, 101u8, 82u8, 15u8, 115u8, 105u8,
+            100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 78u8, 117u8, 109u8, 98u8,
+            101u8, 114u8, 18u8, 59u8, 10u8, 11u8, 98u8, 117u8, 110u8, 100u8, 108u8,
+            101u8, 95u8, 116u8, 120u8, 105u8, 100u8, 24u8, 2u8, 32u8, 1u8, 40u8, 11u8,
+            50u8, 26u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 99u8, 111u8, 109u8, 109u8,
+            111u8, 110u8, 46u8, 118u8, 49u8, 46u8, 82u8, 101u8, 118u8, 101u8, 114u8,
+            115u8, 101u8, 72u8, 101u8, 120u8, 82u8, 10u8, 98u8, 117u8, 110u8, 100u8,
+            108u8, 101u8, 84u8, 120u8, 105u8, 100u8, 26u8, 147u8, 3u8, 10u8, 10u8, 65u8,
+            99u8, 107u8, 66u8, 117u8, 110u8, 100u8, 108u8, 101u8, 115u8, 18u8, 110u8,
+            10u8, 15u8, 114u8, 101u8, 112u8, 101u8, 97u8, 116u8, 95u8, 112u8, 114u8,
+            101u8, 118u8, 105u8, 111u8, 117u8, 115u8, 24u8, 1u8, 32u8, 1u8, 40u8, 11u8,
+            50u8, 67u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8,
+            99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8,
+            67u8, 111u8, 105u8, 110u8, 98u8, 97u8, 115u8, 101u8, 80u8, 83u8, 66u8, 84u8,
+            82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 46u8, 65u8, 99u8, 107u8,
+            66u8, 117u8, 110u8, 100u8, 108u8, 101u8, 115u8, 46u8, 82u8, 101u8, 112u8,
+            101u8, 97u8, 116u8, 80u8, 114u8, 101u8, 118u8, 105u8, 111u8, 117u8, 115u8,
+            72u8, 0u8, 82u8, 14u8, 114u8, 101u8, 112u8, 101u8, 97u8, 116u8, 80u8, 114u8,
+            101u8, 118u8, 105u8, 111u8, 117u8, 115u8, 18u8, 102u8, 10u8, 13u8, 108u8,
+            101u8, 97u8, 100u8, 105u8, 110u8, 103u8, 95u8, 98u8, 121u8, 95u8, 53u8, 48u8,
+            24u8, 2u8, 32u8, 1u8, 40u8, 11u8, 50u8, 64u8, 46u8, 99u8, 117u8, 115u8,
+            102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8,
+            46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8, 111u8, 105u8, 110u8, 98u8,
+            97u8, 115u8, 101u8, 80u8, 83u8, 66u8, 84u8, 82u8, 101u8, 113u8, 117u8, 101u8,
             115u8, 116u8, 46u8, 65u8, 99u8, 107u8, 66u8, 117u8, 110u8, 100u8, 108u8,
             101u8, 115u8, 46u8, 76u8, 101u8, 97u8, 100u8, 105u8, 110u8, 103u8, 66u8,
             121u8, 53u8, 48u8, 72u8, 0u8, 82u8, 11u8, 108u8, 101u8, 97u8, 100u8, 105u8,
@@ -84121,7 +87480,7 @@ pub mod __buffa {
             114u8, 111u8, 116u8, 111u8, 98u8, 117u8, 102u8, 46u8, 85u8, 73u8, 110u8,
             116u8, 51u8, 50u8, 86u8, 97u8, 108u8, 117u8, 101u8, 82u8, 15u8, 115u8, 105u8,
             100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 78u8, 117u8, 109u8, 98u8,
-            101u8, 114u8, 34u8, 186u8, 2u8, 10u8, 26u8, 71u8, 101u8, 116u8, 83u8, 101u8,
+            101u8, 114u8, 34u8, 148u8, 3u8, 10u8, 26u8, 71u8, 101u8, 116u8, 83u8, 101u8,
             101u8, 110u8, 66u8, 109u8, 109u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8,
             116u8, 115u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 18u8,
             84u8, 10u8, 8u8, 114u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 115u8,
@@ -84131,7 +87490,15 @@ pub mod __buffa {
             109u8, 109u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 115u8, 82u8,
             101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 46u8, 66u8, 109u8, 109u8,
             82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 82u8, 8u8, 114u8, 101u8,
-            113u8, 117u8, 101u8, 115u8, 116u8, 115u8, 26u8, 197u8, 1u8, 10u8, 10u8, 66u8,
+            113u8, 117u8, 101u8, 115u8, 116u8, 115u8, 18u8, 41u8, 10u8, 16u8, 111u8,
+            98u8, 115u8, 101u8, 114u8, 118u8, 101u8, 114u8, 95u8, 115u8, 101u8, 115u8,
+            115u8, 105u8, 111u8, 110u8, 24u8, 2u8, 32u8, 1u8, 40u8, 9u8, 82u8, 15u8,
+            111u8, 98u8, 115u8, 101u8, 114u8, 118u8, 101u8, 114u8, 83u8, 101u8, 115u8,
+            115u8, 105u8, 111u8, 110u8, 18u8, 45u8, 10u8, 18u8, 109u8, 101u8, 109u8,
+            112u8, 111u8, 111u8, 108u8, 95u8, 103u8, 101u8, 110u8, 101u8, 114u8, 97u8,
+            116u8, 105u8, 111u8, 110u8, 24u8, 3u8, 32u8, 1u8, 40u8, 4u8, 82u8, 17u8,
+            109u8, 101u8, 109u8, 112u8, 111u8, 111u8, 108u8, 71u8, 101u8, 110u8, 101u8,
+            114u8, 97u8, 116u8, 105u8, 111u8, 110u8, 26u8, 197u8, 1u8, 10u8, 10u8, 66u8,
             109u8, 109u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 18u8, 41u8,
             10u8, 16u8, 115u8, 105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8,
             95u8, 110u8, 117u8, 109u8, 98u8, 101u8, 114u8, 24u8, 1u8, 32u8, 1u8, 40u8,
@@ -84422,188 +87789,285 @@ pub mod __buffa {
             104u8, 101u8, 105u8, 103u8, 104u8, 116u8, 34u8, 13u8, 10u8, 11u8, 83u8,
             116u8, 111u8, 112u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 34u8,
             14u8, 10u8, 12u8, 83u8, 116u8, 111u8, 112u8, 82u8, 101u8, 115u8, 112u8,
-            111u8, 110u8, 115u8, 101u8, 42u8, 138u8, 1u8, 10u8, 7u8, 78u8, 101u8, 116u8,
-            119u8, 111u8, 114u8, 107u8, 18u8, 23u8, 10u8, 19u8, 78u8, 69u8, 84u8, 87u8,
-            79u8, 82u8, 75u8, 95u8, 85u8, 78u8, 83u8, 80u8, 69u8, 67u8, 73u8, 70u8, 73u8,
-            69u8, 68u8, 16u8, 0u8, 18u8, 19u8, 10u8, 15u8, 78u8, 69u8, 84u8, 87u8, 79u8,
-            82u8, 75u8, 95u8, 85u8, 78u8, 75u8, 78u8, 79u8, 87u8, 78u8, 16u8, 1u8, 18u8,
-            19u8, 10u8, 15u8, 78u8, 69u8, 84u8, 87u8, 79u8, 82u8, 75u8, 95u8, 77u8, 65u8,
-            73u8, 78u8, 78u8, 69u8, 84u8, 16u8, 2u8, 18u8, 19u8, 10u8, 15u8, 78u8, 69u8,
-            84u8, 87u8, 79u8, 82u8, 75u8, 95u8, 82u8, 69u8, 71u8, 84u8, 69u8, 83u8, 84u8,
-            16u8, 3u8, 18u8, 18u8, 10u8, 14u8, 78u8, 69u8, 84u8, 87u8, 79u8, 82u8, 75u8,
-            95u8, 83u8, 73u8, 71u8, 78u8, 69u8, 84u8, 16u8, 4u8, 18u8, 19u8, 10u8, 15u8,
-            78u8, 69u8, 84u8, 87u8, 79u8, 82u8, 75u8, 95u8, 84u8, 69u8, 83u8, 84u8, 78u8,
-            69u8, 84u8, 16u8, 5u8, 50u8, 187u8, 14u8, 10u8, 16u8, 86u8, 97u8, 108u8,
-            105u8, 100u8, 97u8, 116u8, 111u8, 114u8, 83u8, 101u8, 114u8, 118u8, 105u8,
-            99u8, 101u8, 18u8, 118u8, 10u8, 18u8, 71u8, 101u8, 116u8, 66u8, 108u8, 111u8,
+            111u8, 110u8, 115u8, 101u8, 34u8, 33u8, 10u8, 31u8, 83u8, 117u8, 98u8, 115u8,
+            99u8, 114u8, 105u8, 98u8, 101u8, 77u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8,
+            105u8, 110u8, 69u8, 118u8, 101u8, 110u8, 116u8, 115u8, 82u8, 101u8, 113u8,
+            117u8, 101u8, 115u8, 116u8, 34u8, 234u8, 2u8, 10u8, 32u8, 83u8, 117u8, 98u8,
+            115u8, 99u8, 114u8, 105u8, 98u8, 101u8, 77u8, 97u8, 105u8, 110u8, 99u8,
+            104u8, 97u8, 105u8, 110u8, 69u8, 118u8, 101u8, 110u8, 116u8, 115u8, 82u8,
+            101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 18u8, 41u8, 10u8, 16u8,
+            111u8, 98u8, 115u8, 101u8, 114u8, 118u8, 101u8, 114u8, 95u8, 115u8, 101u8,
+            115u8, 115u8, 105u8, 111u8, 110u8, 24u8, 1u8, 32u8, 1u8, 40u8, 9u8, 82u8,
+            15u8, 111u8, 98u8, 115u8, 101u8, 114u8, 118u8, 101u8, 114u8, 83u8, 101u8,
+            115u8, 115u8, 105u8, 111u8, 110u8, 18u8, 26u8, 10u8, 8u8, 115u8, 101u8,
+            113u8, 117u8, 101u8, 110u8, 99u8, 101u8, 24u8, 2u8, 32u8, 1u8, 40u8, 4u8,
+            82u8, 8u8, 115u8, 101u8, 113u8, 117u8, 101u8, 110u8, 99u8, 101u8, 18u8, 82u8,
+            10u8, 6u8, 97u8, 99u8, 116u8, 105u8, 111u8, 110u8, 24u8, 3u8, 32u8, 1u8,
+            40u8, 14u8, 50u8, 58u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8,
+            105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 83u8,
+            117u8, 98u8, 115u8, 99u8, 114u8, 105u8, 98u8, 101u8, 77u8, 97u8, 105u8,
+            110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 69u8, 118u8, 101u8, 110u8, 116u8,
+            115u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 46u8, 65u8,
+            99u8, 116u8, 105u8, 111u8, 110u8, 82u8, 6u8, 97u8, 99u8, 116u8, 105u8, 111u8,
+            110u8, 18u8, 67u8, 10u8, 11u8, 104u8, 101u8, 97u8, 100u8, 101u8, 114u8, 95u8,
+            105u8, 110u8, 102u8, 111u8, 24u8, 4u8, 32u8, 1u8, 40u8, 11u8, 50u8, 34u8,
+            46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8,
+            104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 66u8, 108u8, 111u8, 99u8,
+            107u8, 72u8, 101u8, 97u8, 100u8, 101u8, 114u8, 73u8, 110u8, 102u8, 111u8,
+            82u8, 10u8, 104u8, 101u8, 97u8, 100u8, 101u8, 114u8, 73u8, 110u8, 102u8,
+            111u8, 34u8, 102u8, 10u8, 6u8, 65u8, 99u8, 116u8, 105u8, 111u8, 110u8, 18u8,
+            22u8, 10u8, 18u8, 65u8, 67u8, 84u8, 73u8, 79u8, 78u8, 95u8, 85u8, 78u8, 83u8,
+            80u8, 69u8, 67u8, 73u8, 70u8, 73u8, 69u8, 68u8, 16u8, 0u8, 18u8, 21u8, 10u8,
+            17u8, 65u8, 67u8, 84u8, 73u8, 79u8, 78u8, 95u8, 83u8, 85u8, 66u8, 83u8, 67u8,
+            82u8, 73u8, 66u8, 69u8, 68u8, 16u8, 3u8, 18u8, 20u8, 10u8, 16u8, 65u8, 67u8,
+            84u8, 73u8, 79u8, 78u8, 95u8, 67u8, 79u8, 78u8, 78u8, 69u8, 67u8, 84u8, 69u8,
+            68u8, 16u8, 1u8, 18u8, 23u8, 10u8, 19u8, 65u8, 67u8, 84u8, 73u8, 79u8, 78u8,
+            95u8, 68u8, 73u8, 83u8, 67u8, 79u8, 78u8, 78u8, 69u8, 67u8, 84u8, 69u8, 68u8,
+            16u8, 2u8, 34u8, 87u8, 10u8, 26u8, 71u8, 101u8, 116u8, 67u8, 111u8, 110u8,
+            102u8, 105u8, 114u8, 109u8, 101u8, 100u8, 66u8, 109u8, 109u8, 70u8, 101u8,
+            101u8, 115u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 18u8, 57u8,
+            10u8, 10u8, 98u8, 108u8, 111u8, 99u8, 107u8, 95u8, 104u8, 97u8, 115u8, 104u8,
+            24u8, 1u8, 32u8, 1u8, 40u8, 11u8, 50u8, 26u8, 46u8, 99u8, 117u8, 115u8,
+            102u8, 46u8, 99u8, 111u8, 109u8, 109u8, 111u8, 110u8, 46u8, 118u8, 49u8,
+            46u8, 82u8, 101u8, 118u8, 101u8, 114u8, 115u8, 101u8, 72u8, 101u8, 120u8,
+            82u8, 9u8, 98u8, 108u8, 111u8, 99u8, 107u8, 72u8, 97u8, 115u8, 104u8, 34u8,
+            200u8, 1u8, 10u8, 15u8, 67u8, 111u8, 110u8, 102u8, 105u8, 114u8, 109u8,
+            101u8, 100u8, 66u8, 109u8, 109u8, 70u8, 101u8, 101u8, 18u8, 41u8, 10u8, 16u8,
+            115u8, 105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 95u8, 110u8,
+            117u8, 109u8, 98u8, 101u8, 114u8, 24u8, 1u8, 32u8, 1u8, 40u8, 13u8, 82u8,
+            15u8, 115u8, 105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 78u8,
+            117u8, 109u8, 98u8, 101u8, 114u8, 18u8, 46u8, 10u8, 4u8, 116u8, 120u8, 105u8,
+            100u8, 24u8, 2u8, 32u8, 1u8, 40u8, 11u8, 50u8, 26u8, 46u8, 99u8, 117u8,
+            115u8, 102u8, 46u8, 99u8, 111u8, 109u8, 109u8, 111u8, 110u8, 46u8, 118u8,
+            49u8, 46u8, 82u8, 101u8, 118u8, 101u8, 114u8, 115u8, 101u8, 72u8, 101u8,
+            120u8, 82u8, 4u8, 116u8, 120u8, 105u8, 100u8, 18u8, 30u8, 10u8, 8u8, 102u8,
+            101u8, 101u8, 95u8, 115u8, 97u8, 116u8, 115u8, 24u8, 3u8, 32u8, 1u8, 40u8,
+            4u8, 72u8, 0u8, 82u8, 7u8, 102u8, 101u8, 101u8, 83u8, 97u8, 116u8, 115u8,
+            136u8, 1u8, 1u8, 18u8, 45u8, 10u8, 18u8, 117u8, 110u8, 97u8, 118u8, 97u8,
+            105u8, 108u8, 97u8, 98u8, 108u8, 101u8, 95u8, 114u8, 101u8, 97u8, 115u8,
+            111u8, 110u8, 24u8, 4u8, 32u8, 1u8, 40u8, 9u8, 82u8, 17u8, 117u8, 110u8,
+            97u8, 118u8, 97u8, 105u8, 108u8, 97u8, 98u8, 108u8, 101u8, 82u8, 101u8, 97u8,
+            115u8, 111u8, 110u8, 66u8, 11u8, 10u8, 9u8, 95u8, 102u8, 101u8, 101u8, 95u8,
+            115u8, 97u8, 116u8, 115u8, 34u8, 178u8, 1u8, 10u8, 27u8, 71u8, 101u8, 116u8,
+            67u8, 111u8, 110u8, 102u8, 105u8, 114u8, 109u8, 101u8, 100u8, 66u8, 109u8,
+            109u8, 70u8, 101u8, 101u8, 115u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8,
+            115u8, 101u8, 18u8, 67u8, 10u8, 11u8, 104u8, 101u8, 97u8, 100u8, 101u8,
+            114u8, 95u8, 105u8, 110u8, 102u8, 111u8, 24u8, 1u8, 32u8, 1u8, 40u8, 11u8,
+            50u8, 34u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8,
+            99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 66u8, 108u8, 111u8,
             99u8, 107u8, 72u8, 101u8, 97u8, 100u8, 101u8, 114u8, 73u8, 110u8, 102u8,
-            111u8, 18u8, 44u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8,
-            110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8,
-            116u8, 66u8, 108u8, 111u8, 99u8, 107u8, 72u8, 101u8, 97u8, 100u8, 101u8,
-            114u8, 73u8, 110u8, 102u8, 111u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8,
-            116u8, 26u8, 45u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8,
-            110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8,
-            116u8, 66u8, 108u8, 111u8, 99u8, 107u8, 72u8, 101u8, 97u8, 100u8, 101u8,
-            114u8, 73u8, 110u8, 102u8, 111u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8,
-            115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 18u8, 100u8, 10u8, 12u8, 71u8,
-            101u8, 116u8, 66u8, 108u8, 111u8, 99u8, 107u8, 73u8, 110u8, 102u8, 111u8,
-            18u8, 38u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8,
-            99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8,
-            66u8, 108u8, 111u8, 99u8, 107u8, 73u8, 110u8, 102u8, 111u8, 82u8, 101u8,
-            113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 39u8, 46u8, 99u8, 117u8, 115u8,
-            102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8,
-            46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 66u8, 108u8, 111u8, 99u8, 107u8,
-            73u8, 110u8, 102u8, 111u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8, 115u8,
-            101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 18u8, 121u8, 10u8, 19u8, 71u8, 101u8,
-            116u8, 66u8, 105u8, 112u8, 51u8, 48u8, 48u8, 66u8, 108u8, 111u8, 99u8, 107u8,
-            68u8, 101u8, 108u8, 116u8, 97u8, 18u8, 45u8, 46u8, 99u8, 117u8, 115u8, 102u8,
-            46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8,
-            118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 66u8, 105u8, 112u8, 51u8, 48u8, 48u8,
-            66u8, 108u8, 111u8, 99u8, 107u8, 68u8, 101u8, 108u8, 116u8, 97u8, 82u8,
-            101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 46u8, 46u8, 99u8, 117u8,
-            115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8,
-            110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 66u8, 105u8, 112u8, 51u8,
-            48u8, 48u8, 66u8, 108u8, 111u8, 99u8, 107u8, 68u8, 101u8, 108u8, 116u8, 97u8,
-            82u8, 101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8,
-            1u8, 18u8, 127u8, 10u8, 21u8, 71u8, 101u8, 116u8, 66u8, 109u8, 109u8, 72u8,
-            83u8, 116u8, 97u8, 114u8, 67u8, 111u8, 109u8, 109u8, 105u8, 116u8, 109u8,
-            101u8, 110u8, 116u8, 18u8, 47u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8,
+            111u8, 82u8, 10u8, 104u8, 101u8, 97u8, 100u8, 101u8, 114u8, 73u8, 110u8,
+            102u8, 111u8, 18u8, 54u8, 10u8, 4u8, 102u8, 101u8, 101u8, 115u8, 24u8, 2u8,
+            32u8, 3u8, 40u8, 11u8, 50u8, 34u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8,
             109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8,
-            49u8, 46u8, 71u8, 101u8, 116u8, 66u8, 109u8, 109u8, 72u8, 83u8, 116u8, 97u8,
-            114u8, 67u8, 111u8, 109u8, 109u8, 105u8, 116u8, 109u8, 101u8, 110u8, 116u8,
-            82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 48u8, 46u8, 99u8,
+            49u8, 46u8, 67u8, 111u8, 110u8, 102u8, 105u8, 114u8, 109u8, 101u8, 100u8,
+            66u8, 109u8, 109u8, 70u8, 101u8, 101u8, 82u8, 4u8, 102u8, 101u8, 101u8,
+            115u8, 18u8, 22u8, 10u8, 6u8, 115u8, 111u8, 117u8, 114u8, 99u8, 101u8, 24u8,
+            3u8, 32u8, 1u8, 40u8, 9u8, 82u8, 6u8, 115u8, 111u8, 117u8, 114u8, 99u8,
+            101u8, 42u8, 138u8, 1u8, 10u8, 7u8, 78u8, 101u8, 116u8, 119u8, 111u8, 114u8,
+            107u8, 18u8, 23u8, 10u8, 19u8, 78u8, 69u8, 84u8, 87u8, 79u8, 82u8, 75u8,
+            95u8, 85u8, 78u8, 83u8, 80u8, 69u8, 67u8, 73u8, 70u8, 73u8, 69u8, 68u8, 16u8,
+            0u8, 18u8, 19u8, 10u8, 15u8, 78u8, 69u8, 84u8, 87u8, 79u8, 82u8, 75u8, 95u8,
+            85u8, 78u8, 75u8, 78u8, 79u8, 87u8, 78u8, 16u8, 1u8, 18u8, 19u8, 10u8, 15u8,
+            78u8, 69u8, 84u8, 87u8, 79u8, 82u8, 75u8, 95u8, 77u8, 65u8, 73u8, 78u8, 78u8,
+            69u8, 84u8, 16u8, 2u8, 18u8, 19u8, 10u8, 15u8, 78u8, 69u8, 84u8, 87u8, 79u8,
+            82u8, 75u8, 95u8, 82u8, 69u8, 71u8, 84u8, 69u8, 83u8, 84u8, 16u8, 3u8, 18u8,
+            18u8, 10u8, 14u8, 78u8, 69u8, 84u8, 87u8, 79u8, 82u8, 75u8, 95u8, 83u8, 73u8,
+            71u8, 78u8, 69u8, 84u8, 16u8, 4u8, 18u8, 19u8, 10u8, 15u8, 78u8, 69u8, 84u8,
+            87u8, 79u8, 82u8, 75u8, 95u8, 84u8, 69u8, 83u8, 84u8, 78u8, 69u8, 84u8, 16u8,
+            5u8, 50u8, 195u8, 16u8, 10u8, 16u8, 86u8, 97u8, 108u8, 105u8, 100u8, 97u8,
+            116u8, 111u8, 114u8, 83u8, 101u8, 114u8, 118u8, 105u8, 99u8, 101u8, 18u8,
+            121u8, 10u8, 19u8, 71u8, 101u8, 116u8, 67u8, 111u8, 110u8, 102u8, 105u8,
+            114u8, 109u8, 101u8, 100u8, 66u8, 109u8, 109u8, 70u8, 101u8, 101u8, 115u8,
+            18u8, 45u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8,
+            99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8,
+            67u8, 111u8, 110u8, 102u8, 105u8, 114u8, 109u8, 101u8, 100u8, 66u8, 109u8,
+            109u8, 70u8, 101u8, 101u8, 115u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8,
+            116u8, 26u8, 46u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8,
+            110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8,
+            116u8, 67u8, 111u8, 110u8, 102u8, 105u8, 114u8, 109u8, 101u8, 100u8, 66u8,
+            109u8, 109u8, 70u8, 101u8, 101u8, 115u8, 82u8, 101u8, 115u8, 112u8, 111u8,
+            110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 18u8, 138u8, 1u8, 10u8,
+            24u8, 83u8, 117u8, 98u8, 115u8, 99u8, 114u8, 105u8, 98u8, 101u8, 77u8, 97u8,
+            105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 69u8, 118u8, 101u8, 110u8,
+            116u8, 115u8, 18u8, 50u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8,
+            105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 83u8,
+            117u8, 98u8, 115u8, 99u8, 114u8, 105u8, 98u8, 101u8, 77u8, 97u8, 105u8,
+            110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 69u8, 118u8, 101u8, 110u8, 116u8,
+            115u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 51u8, 46u8,
+            99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8,
+            97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 83u8, 117u8, 98u8, 115u8, 99u8,
+            114u8, 105u8, 98u8, 101u8, 77u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8,
+            105u8, 110u8, 69u8, 118u8, 101u8, 110u8, 116u8, 115u8, 82u8, 101u8, 115u8,
+            112u8, 111u8, 110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 48u8, 1u8,
+            18u8, 118u8, 10u8, 18u8, 71u8, 101u8, 116u8, 66u8, 108u8, 111u8, 99u8, 107u8,
+            72u8, 101u8, 97u8, 100u8, 101u8, 114u8, 73u8, 110u8, 102u8, 111u8, 18u8,
+            44u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8,
+            104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 66u8,
+            108u8, 111u8, 99u8, 107u8, 72u8, 101u8, 97u8, 100u8, 101u8, 114u8, 73u8,
+            110u8, 102u8, 111u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 26u8,
+            45u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8,
+            104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 66u8,
+            108u8, 111u8, 99u8, 107u8, 72u8, 101u8, 97u8, 100u8, 101u8, 114u8, 73u8,
+            110u8, 102u8, 111u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8,
+            34u8, 3u8, 144u8, 2u8, 1u8, 18u8, 100u8, 10u8, 12u8, 71u8, 101u8, 116u8,
+            66u8, 108u8, 111u8, 99u8, 107u8, 73u8, 110u8, 102u8, 111u8, 18u8, 38u8, 46u8,
+            99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8,
+            97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 66u8, 108u8,
+            111u8, 99u8, 107u8, 73u8, 110u8, 102u8, 111u8, 82u8, 101u8, 113u8, 117u8,
+            101u8, 115u8, 116u8, 26u8, 39u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8,
+            109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8,
+            49u8, 46u8, 71u8, 101u8, 116u8, 66u8, 108u8, 111u8, 99u8, 107u8, 73u8, 110u8,
+            102u8, 111u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 34u8,
+            3u8, 144u8, 2u8, 1u8, 18u8, 121u8, 10u8, 19u8, 71u8, 101u8, 116u8, 66u8,
+            105u8, 112u8, 51u8, 48u8, 48u8, 66u8, 108u8, 111u8, 99u8, 107u8, 68u8, 101u8,
+            108u8, 116u8, 97u8, 18u8, 45u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8,
+            97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8,
+            71u8, 101u8, 116u8, 66u8, 105u8, 112u8, 51u8, 48u8, 48u8, 66u8, 108u8, 111u8,
+            99u8, 107u8, 68u8, 101u8, 108u8, 116u8, 97u8, 82u8, 101u8, 113u8, 117u8,
+            101u8, 115u8, 116u8, 26u8, 46u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8,
+            109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8,
+            49u8, 46u8, 71u8, 101u8, 116u8, 66u8, 105u8, 112u8, 51u8, 48u8, 48u8, 66u8,
+            108u8, 111u8, 99u8, 107u8, 68u8, 101u8, 108u8, 116u8, 97u8, 82u8, 101u8,
+            115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 18u8,
+            127u8, 10u8, 21u8, 71u8, 101u8, 116u8, 66u8, 109u8, 109u8, 72u8, 83u8, 116u8,
+            97u8, 114u8, 67u8, 111u8, 109u8, 109u8, 105u8, 116u8, 109u8, 101u8, 110u8,
+            116u8, 18u8, 47u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8,
+            110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8,
+            116u8, 66u8, 109u8, 109u8, 72u8, 83u8, 116u8, 97u8, 114u8, 67u8, 111u8,
+            109u8, 109u8, 105u8, 116u8, 109u8, 101u8, 110u8, 116u8, 82u8, 101u8, 113u8,
+            117u8, 101u8, 115u8, 116u8, 26u8, 48u8, 46u8, 99u8, 117u8, 115u8, 102u8,
+            46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8,
+            118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 66u8, 109u8, 109u8, 72u8, 83u8, 116u8,
+            97u8, 114u8, 67u8, 111u8, 109u8, 109u8, 105u8, 116u8, 109u8, 101u8, 110u8,
+            116u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 34u8, 3u8,
+            144u8, 2u8, 1u8, 18u8, 100u8, 10u8, 12u8, 71u8, 101u8, 116u8, 67u8, 104u8,
+            97u8, 105u8, 110u8, 73u8, 110u8, 102u8, 111u8, 18u8, 38u8, 46u8, 99u8, 117u8,
+            115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8,
+            110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8, 104u8, 97u8, 105u8,
+            110u8, 73u8, 110u8, 102u8, 111u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8,
+            116u8, 26u8, 39u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8,
+            110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8,
+            116u8, 67u8, 104u8, 97u8, 105u8, 110u8, 73u8, 110u8, 102u8, 111u8, 82u8,
+            101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8,
+            18u8, 97u8, 10u8, 11u8, 71u8, 101u8, 116u8, 67u8, 104u8, 97u8, 105u8, 110u8,
+            84u8, 105u8, 112u8, 18u8, 37u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8,
+            97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8,
+            71u8, 101u8, 116u8, 67u8, 104u8, 97u8, 105u8, 110u8, 84u8, 105u8, 112u8,
+            82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 38u8, 46u8, 99u8,
             117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8,
-            105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 66u8, 109u8,
-            109u8, 72u8, 83u8, 116u8, 97u8, 114u8, 67u8, 111u8, 109u8, 109u8, 105u8,
-            116u8, 109u8, 101u8, 110u8, 116u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8,
-            115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 18u8, 100u8, 10u8, 12u8, 71u8,
-            101u8, 116u8, 67u8, 104u8, 97u8, 105u8, 110u8, 73u8, 110u8, 102u8, 111u8,
-            18u8, 38u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8,
-            99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8,
-            67u8, 104u8, 97u8, 105u8, 110u8, 73u8, 110u8, 102u8, 111u8, 82u8, 101u8,
-            113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 39u8, 46u8, 99u8, 117u8, 115u8,
-            102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8,
-            46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8, 104u8, 97u8, 105u8, 110u8,
-            73u8, 110u8, 102u8, 111u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8, 115u8,
-            101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 18u8, 97u8, 10u8, 11u8, 71u8, 101u8,
-            116u8, 67u8, 104u8, 97u8, 105u8, 110u8, 84u8, 105u8, 112u8, 18u8, 37u8, 46u8,
-            99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8,
-            97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8, 104u8,
-            97u8, 105u8, 110u8, 84u8, 105u8, 112u8, 82u8, 101u8, 113u8, 117u8, 101u8,
-            115u8, 116u8, 26u8, 38u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8,
-            105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8,
-            101u8, 116u8, 67u8, 104u8, 97u8, 105u8, 110u8, 84u8, 105u8, 112u8, 82u8,
+            105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8, 104u8, 97u8,
+            105u8, 110u8, 84u8, 105u8, 112u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8,
+            115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 18u8, 109u8, 10u8, 15u8, 71u8,
+            101u8, 116u8, 67u8, 111u8, 105u8, 110u8, 98u8, 97u8, 115u8, 101u8, 80u8,
+            83u8, 66u8, 84u8, 18u8, 41u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8,
+            97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8,
+            71u8, 101u8, 116u8, 67u8, 111u8, 105u8, 110u8, 98u8, 97u8, 115u8, 101u8,
+            80u8, 83u8, 66u8, 84u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 26u8,
+            42u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8,
+            104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8,
+            111u8, 105u8, 110u8, 98u8, 97u8, 115u8, 101u8, 80u8, 83u8, 66u8, 84u8, 82u8,
             101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8,
-            18u8, 109u8, 10u8, 15u8, 71u8, 101u8, 116u8, 67u8, 111u8, 105u8, 110u8, 98u8,
-            97u8, 115u8, 101u8, 80u8, 83u8, 66u8, 84u8, 18u8, 41u8, 46u8, 99u8, 117u8,
-            115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8,
-            110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8, 111u8, 105u8,
-            110u8, 98u8, 97u8, 115u8, 101u8, 80u8, 83u8, 66u8, 84u8, 82u8, 101u8, 113u8,
-            117u8, 101u8, 115u8, 116u8, 26u8, 42u8, 46u8, 99u8, 117u8, 115u8, 102u8,
+            18u8, 85u8, 10u8, 7u8, 71u8, 101u8, 116u8, 67u8, 116u8, 105u8, 112u8, 18u8,
+            33u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8,
+            104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8,
+            116u8, 105u8, 112u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 26u8,
+            34u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8,
+            104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8,
+            116u8, 105u8, 112u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8,
+            34u8, 3u8, 144u8, 2u8, 1u8, 18u8, 118u8, 10u8, 18u8, 71u8, 101u8, 116u8,
+            83u8, 101u8, 101u8, 110u8, 66u8, 109u8, 109u8, 82u8, 101u8, 113u8, 117u8,
+            101u8, 115u8, 116u8, 115u8, 18u8, 44u8, 46u8, 99u8, 117u8, 115u8, 102u8,
             46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8,
-            118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8, 111u8, 105u8, 110u8, 98u8, 97u8,
-            115u8, 101u8, 80u8, 83u8, 66u8, 84u8, 82u8, 101u8, 115u8, 112u8, 111u8,
-            110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 18u8, 85u8, 10u8, 7u8, 71u8,
-            101u8, 116u8, 67u8, 116u8, 105u8, 112u8, 18u8, 33u8, 46u8, 99u8, 117u8,
-            115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8,
-            110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8, 116u8, 105u8,
-            112u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 34u8, 46u8,
-            99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8,
-            97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 67u8, 116u8,
-            105u8, 112u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 34u8,
-            3u8, 144u8, 2u8, 1u8, 18u8, 118u8, 10u8, 18u8, 71u8, 101u8, 116u8, 83u8,
-            101u8, 101u8, 110u8, 66u8, 109u8, 109u8, 82u8, 101u8, 113u8, 117u8, 101u8,
-            115u8, 116u8, 115u8, 18u8, 44u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8,
-            109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8,
-            49u8, 46u8, 71u8, 101u8, 116u8, 83u8, 101u8, 101u8, 110u8, 66u8, 109u8,
-            109u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 115u8, 82u8, 101u8,
-            113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 45u8, 46u8, 99u8, 117u8, 115u8,
-            102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8,
-            46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 83u8, 101u8, 101u8, 110u8, 66u8,
+            118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 83u8, 101u8, 101u8, 110u8, 66u8,
             109u8, 109u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 115u8, 82u8,
-            101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8,
-            18u8, 127u8, 10u8, 21u8, 71u8, 101u8, 116u8, 83u8, 105u8, 100u8, 101u8, 99u8,
-            104u8, 97u8, 105u8, 110u8, 80u8, 114u8, 111u8, 112u8, 111u8, 115u8, 97u8,
-            108u8, 115u8, 18u8, 47u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8,
-            105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8,
-            101u8, 116u8, 83u8, 105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8,
-            80u8, 114u8, 111u8, 112u8, 111u8, 115u8, 97u8, 108u8, 115u8, 82u8, 101u8,
-            113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 48u8, 46u8, 99u8, 117u8, 115u8,
+            101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 45u8, 46u8, 99u8, 117u8,
+            115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8,
+            110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 83u8, 101u8, 101u8,
+            110u8, 66u8, 109u8, 109u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8,
+            115u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 34u8, 3u8,
+            144u8, 2u8, 1u8, 18u8, 127u8, 10u8, 21u8, 71u8, 101u8, 116u8, 83u8, 105u8,
+            100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 80u8, 114u8, 111u8, 112u8,
+            111u8, 115u8, 97u8, 108u8, 115u8, 18u8, 47u8, 46u8, 99u8, 117u8, 115u8,
             102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8,
             46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 83u8, 105u8, 100u8, 101u8, 99u8,
             104u8, 97u8, 105u8, 110u8, 80u8, 114u8, 111u8, 112u8, 111u8, 115u8, 97u8,
-            108u8, 115u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 34u8,
-            3u8, 144u8, 2u8, 1u8, 18u8, 103u8, 10u8, 13u8, 71u8, 101u8, 116u8, 83u8,
-            105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 115u8, 18u8, 39u8,
+            108u8, 115u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 48u8,
             46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8,
             104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 83u8,
-            105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 115u8, 82u8, 101u8,
-            113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 40u8, 46u8, 99u8, 117u8, 115u8,
-            102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8,
-            46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 83u8, 105u8, 100u8, 101u8, 99u8,
-            104u8, 97u8, 105u8, 110u8, 115u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8,
-            115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 18u8, 112u8, 10u8, 16u8, 71u8,
-            101u8, 116u8, 84u8, 119u8, 111u8, 87u8, 97u8, 121u8, 80u8, 101u8, 103u8,
-            68u8, 97u8, 116u8, 97u8, 18u8, 42u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8,
-            109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8,
-            49u8, 46u8, 71u8, 101u8, 116u8, 84u8, 119u8, 111u8, 87u8, 97u8, 121u8, 80u8,
-            101u8, 103u8, 68u8, 97u8, 116u8, 97u8, 82u8, 101u8, 113u8, 117u8, 101u8,
-            115u8, 116u8, 26u8, 43u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8,
+            105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 80u8, 114u8, 111u8,
+            112u8, 111u8, 115u8, 97u8, 108u8, 115u8, 82u8, 101u8, 115u8, 112u8, 111u8,
+            110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 18u8, 103u8, 10u8, 13u8,
+            71u8, 101u8, 116u8, 83u8, 105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8,
+            110u8, 115u8, 18u8, 39u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8,
             105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8,
-            101u8, 116u8, 84u8, 119u8, 111u8, 87u8, 97u8, 121u8, 80u8, 101u8, 103u8,
-            68u8, 97u8, 116u8, 97u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8, 115u8,
-            101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 18u8, 148u8, 1u8, 10u8, 28u8, 71u8, 101u8,
-            116u8, 87u8, 105u8, 116u8, 104u8, 100u8, 114u8, 97u8, 119u8, 97u8, 108u8,
-            66u8, 117u8, 110u8, 100u8, 108u8, 101u8, 80u8, 114u8, 111u8, 112u8, 111u8,
-            115u8, 97u8, 108u8, 115u8, 18u8, 54u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8,
-            109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8, 118u8,
-            49u8, 46u8, 71u8, 101u8, 116u8, 87u8, 105u8, 116u8, 104u8, 100u8, 114u8,
-            97u8, 119u8, 97u8, 108u8, 66u8, 117u8, 110u8, 100u8, 108u8, 101u8, 80u8,
-            114u8, 111u8, 112u8, 111u8, 115u8, 97u8, 108u8, 115u8, 82u8, 101u8, 113u8,
-            117u8, 101u8, 115u8, 116u8, 26u8, 55u8, 46u8, 99u8, 117u8, 115u8, 102u8,
-            46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8,
-            118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 87u8, 105u8, 116u8, 104u8, 100u8,
-            114u8, 97u8, 119u8, 97u8, 108u8, 66u8, 117u8, 110u8, 100u8, 108u8, 101u8,
-            80u8, 114u8, 111u8, 112u8, 111u8, 115u8, 97u8, 108u8, 115u8, 82u8, 101u8,
-            115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 18u8,
-            111u8, 10u8, 15u8, 83u8, 117u8, 98u8, 115u8, 99u8, 114u8, 105u8, 98u8, 101u8,
-            69u8, 118u8, 101u8, 110u8, 116u8, 115u8, 18u8, 41u8, 46u8, 99u8, 117u8,
-            115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8,
-            110u8, 46u8, 118u8, 49u8, 46u8, 83u8, 117u8, 98u8, 115u8, 99u8, 114u8, 105u8,
-            98u8, 101u8, 69u8, 118u8, 101u8, 110u8, 116u8, 115u8, 82u8, 101u8, 113u8,
-            117u8, 101u8, 115u8, 116u8, 26u8, 42u8, 46u8, 99u8, 117u8, 115u8, 102u8,
-            46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8,
-            118u8, 49u8, 46u8, 83u8, 117u8, 98u8, 115u8, 99u8, 114u8, 105u8, 98u8, 101u8,
-            69u8, 118u8, 101u8, 110u8, 116u8, 115u8, 82u8, 101u8, 115u8, 112u8, 111u8,
-            110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 48u8, 1u8, 18u8, 147u8, 1u8,
-            10u8, 27u8, 83u8, 117u8, 98u8, 115u8, 99u8, 114u8, 105u8, 98u8, 101u8, 72u8,
-            101u8, 97u8, 100u8, 101u8, 114u8, 83u8, 121u8, 110u8, 99u8, 80u8, 114u8,
-            111u8, 103u8, 114u8, 101u8, 115u8, 115u8, 18u8, 53u8, 46u8, 99u8, 117u8,
-            115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8,
-            110u8, 46u8, 118u8, 49u8, 46u8, 83u8, 117u8, 98u8, 115u8, 99u8, 114u8, 105u8,
-            98u8, 101u8, 72u8, 101u8, 97u8, 100u8, 101u8, 114u8, 83u8, 121u8, 110u8,
-            99u8, 80u8, 114u8, 111u8, 103u8, 114u8, 101u8, 115u8, 115u8, 82u8, 101u8,
-            113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 54u8, 46u8, 99u8, 117u8, 115u8,
+            101u8, 116u8, 83u8, 105u8, 100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8,
+            115u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 40u8, 46u8,
+            99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8,
+            97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 83u8, 105u8,
+            100u8, 101u8, 99u8, 104u8, 97u8, 105u8, 110u8, 115u8, 82u8, 101u8, 115u8,
+            112u8, 111u8, 110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 18u8, 112u8,
+            10u8, 16u8, 71u8, 101u8, 116u8, 84u8, 119u8, 111u8, 87u8, 97u8, 121u8, 80u8,
+            101u8, 103u8, 68u8, 97u8, 116u8, 97u8, 18u8, 42u8, 46u8, 99u8, 117u8, 115u8,
             102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8,
-            46u8, 118u8, 49u8, 46u8, 83u8, 117u8, 98u8, 115u8, 99u8, 114u8, 105u8, 98u8,
-            101u8, 72u8, 101u8, 97u8, 100u8, 101u8, 114u8, 83u8, 121u8, 110u8, 99u8,
-            80u8, 114u8, 111u8, 103u8, 114u8, 101u8, 115u8, 115u8, 82u8, 101u8, 115u8,
-            112u8, 111u8, 110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 48u8, 1u8,
-            18u8, 76u8, 10u8, 4u8, 83u8, 116u8, 111u8, 112u8, 18u8, 30u8, 46u8, 99u8,
+            46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 84u8, 119u8, 111u8, 87u8, 97u8,
+            121u8, 80u8, 101u8, 103u8, 68u8, 97u8, 116u8, 97u8, 82u8, 101u8, 113u8,
+            117u8, 101u8, 115u8, 116u8, 26u8, 43u8, 46u8, 99u8, 117u8, 115u8, 102u8,
+            46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8, 110u8, 46u8,
+            118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 84u8, 119u8, 111u8, 87u8, 97u8, 121u8,
+            80u8, 101u8, 103u8, 68u8, 97u8, 116u8, 97u8, 82u8, 101u8, 115u8, 112u8,
+            111u8, 110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 18u8, 148u8, 1u8,
+            10u8, 28u8, 71u8, 101u8, 116u8, 87u8, 105u8, 116u8, 104u8, 100u8, 114u8,
+            97u8, 119u8, 97u8, 108u8, 66u8, 117u8, 110u8, 100u8, 108u8, 101u8, 80u8,
+            114u8, 111u8, 112u8, 111u8, 115u8, 97u8, 108u8, 115u8, 18u8, 54u8, 46u8,
+            99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8,
+            97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 87u8, 105u8,
+            116u8, 104u8, 100u8, 114u8, 97u8, 119u8, 97u8, 108u8, 66u8, 117u8, 110u8,
+            100u8, 108u8, 101u8, 80u8, 114u8, 111u8, 112u8, 111u8, 115u8, 97u8, 108u8,
+            115u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 55u8, 46u8,
+            99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8,
+            97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 71u8, 101u8, 116u8, 87u8, 105u8,
+            116u8, 104u8, 100u8, 114u8, 97u8, 119u8, 97u8, 108u8, 66u8, 117u8, 110u8,
+            100u8, 108u8, 101u8, 80u8, 114u8, 111u8, 112u8, 111u8, 115u8, 97u8, 108u8,
+            115u8, 82u8, 101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 34u8, 3u8,
+            144u8, 2u8, 1u8, 18u8, 111u8, 10u8, 15u8, 83u8, 117u8, 98u8, 115u8, 99u8,
+            114u8, 105u8, 98u8, 101u8, 69u8, 118u8, 101u8, 110u8, 116u8, 115u8, 18u8,
+            41u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8,
+            104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 83u8, 117u8, 98u8, 115u8,
+            99u8, 114u8, 105u8, 98u8, 101u8, 69u8, 118u8, 101u8, 110u8, 116u8, 115u8,
+            82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 42u8, 46u8, 99u8,
             117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8,
-            105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 83u8, 116u8, 111u8, 112u8, 82u8,
-            101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 31u8, 46u8, 99u8, 117u8,
-            115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8, 97u8, 105u8,
-            110u8, 46u8, 118u8, 49u8, 46u8, 83u8, 116u8, 111u8, 112u8, 82u8, 101u8,
-            115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 2u8, 98u8,
-            6u8, 112u8, 114u8, 111u8, 116u8, 111u8, 51u8, 10u8, 255u8, 1u8, 10u8, 31u8,
-            103u8, 111u8, 111u8, 103u8, 108u8, 101u8, 47u8, 112u8, 114u8, 111u8, 116u8,
-            111u8, 98u8, 117u8, 102u8, 47u8, 116u8, 105u8, 109u8, 101u8, 115u8, 116u8,
-            97u8, 109u8, 112u8, 46u8, 112u8, 114u8, 111u8, 116u8, 111u8, 18u8, 15u8,
-            103u8, 111u8, 111u8, 103u8, 108u8, 101u8, 46u8, 112u8, 114u8, 111u8, 116u8,
-            111u8, 98u8, 117u8, 102u8, 34u8, 59u8, 10u8, 9u8, 84u8, 105u8, 109u8, 101u8,
-            115u8, 116u8, 97u8, 109u8, 112u8, 18u8, 24u8, 10u8, 7u8, 115u8, 101u8, 99u8,
-            111u8, 110u8, 100u8, 115u8, 24u8, 1u8, 32u8, 1u8, 40u8, 3u8, 82u8, 7u8,
+            105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 83u8, 117u8, 98u8, 115u8, 99u8, 114u8,
+            105u8, 98u8, 101u8, 69u8, 118u8, 101u8, 110u8, 116u8, 115u8, 82u8, 101u8,
+            115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 1u8, 48u8,
+            1u8, 18u8, 147u8, 1u8, 10u8, 27u8, 83u8, 117u8, 98u8, 115u8, 99u8, 114u8,
+            105u8, 98u8, 101u8, 72u8, 101u8, 97u8, 100u8, 101u8, 114u8, 83u8, 121u8,
+            110u8, 99u8, 80u8, 114u8, 111u8, 103u8, 114u8, 101u8, 115u8, 115u8, 18u8,
+            53u8, 46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8,
+            104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 83u8, 117u8, 98u8, 115u8,
+            99u8, 114u8, 105u8, 98u8, 101u8, 72u8, 101u8, 97u8, 100u8, 101u8, 114u8,
+            83u8, 121u8, 110u8, 99u8, 80u8, 114u8, 111u8, 103u8, 114u8, 101u8, 115u8,
+            115u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 54u8, 46u8,
+            99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8,
+            97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 83u8, 117u8, 98u8, 115u8, 99u8,
+            114u8, 105u8, 98u8, 101u8, 72u8, 101u8, 97u8, 100u8, 101u8, 114u8, 83u8,
+            121u8, 110u8, 99u8, 80u8, 114u8, 111u8, 103u8, 114u8, 101u8, 115u8, 115u8,
+            82u8, 101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8,
+            1u8, 48u8, 1u8, 18u8, 76u8, 10u8, 4u8, 83u8, 116u8, 111u8, 112u8, 18u8, 30u8,
+            46u8, 99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8,
+            104u8, 97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 83u8, 116u8, 111u8,
+            112u8, 82u8, 101u8, 113u8, 117u8, 101u8, 115u8, 116u8, 26u8, 31u8, 46u8,
+            99u8, 117u8, 115u8, 102u8, 46u8, 109u8, 97u8, 105u8, 110u8, 99u8, 104u8,
+            97u8, 105u8, 110u8, 46u8, 118u8, 49u8, 46u8, 83u8, 116u8, 111u8, 112u8, 82u8,
+            101u8, 115u8, 112u8, 111u8, 110u8, 115u8, 101u8, 34u8, 3u8, 144u8, 2u8, 2u8,
+            98u8, 6u8, 112u8, 114u8, 111u8, 116u8, 111u8, 51u8, 10u8, 255u8, 1u8, 10u8,
+            31u8, 103u8, 111u8, 111u8, 103u8, 108u8, 101u8, 47u8, 112u8, 114u8, 111u8,
+            116u8, 111u8, 98u8, 117u8, 102u8, 47u8, 116u8, 105u8, 109u8, 101u8, 115u8,
+            116u8, 97u8, 109u8, 112u8, 46u8, 112u8, 114u8, 111u8, 116u8, 111u8, 18u8,
+            15u8, 103u8, 111u8, 111u8, 103u8, 108u8, 101u8, 46u8, 112u8, 114u8, 111u8,
+            116u8, 111u8, 98u8, 117u8, 102u8, 34u8, 59u8, 10u8, 9u8, 84u8, 105u8, 109u8,
+            101u8, 115u8, 116u8, 97u8, 109u8, 112u8, 18u8, 24u8, 10u8, 7u8, 115u8, 101u8,
+            99u8, 111u8, 110u8, 100u8, 115u8, 24u8, 1u8, 32u8, 1u8, 40u8, 3u8, 82u8, 7u8,
             115u8, 101u8, 99u8, 111u8, 110u8, 100u8, 115u8, 18u8, 20u8, 10u8, 5u8, 110u8,
             97u8, 110u8, 111u8, 115u8, 24u8, 2u8, 32u8, 1u8, 40u8, 5u8, 82u8, 5u8, 110u8,
             97u8, 110u8, 111u8, 115u8, 66u8, 133u8, 1u8, 10u8, 19u8, 99u8, 111u8, 109u8,
@@ -85530,6 +88994,26 @@ pub use self::__buffa::view::StopRequestOwnedView;
 pub use self::__buffa::view::StopResponseView;
 #[doc(inline)]
 pub use self::__buffa::view::StopResponseOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::SubscribeMainchainEventsRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::SubscribeMainchainEventsRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::SubscribeMainchainEventsResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::SubscribeMainchainEventsResponseOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::GetConfirmedBmmFeesRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::GetConfirmedBmmFeesRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::ConfirmedBmmFeeView;
+#[doc(inline)]
+pub use self::__buffa::view::ConfirmedBmmFeeOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::GetConfirmedBmmFeesResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::GetConfirmedBmmFeesResponseOwnedView;
 #[doc(inline)]
 pub use self::__buffa::view::WalletTransactionView;
 #[doc(inline)]

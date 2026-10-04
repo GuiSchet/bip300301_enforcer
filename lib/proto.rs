@@ -818,6 +818,10 @@ impl From<crate::types::HeaderInfo> for BlockHeaderInfo {
             height: info.height,
             work: MessageField::some(ConsensusHex::encode(&info.work.to_le_bytes())),
             timestamp: info.timestamp as u64,
+            cumulative_work: info
+                .cumulative_work
+                .map(|work| ConsensusHex::encode(&work.to_le_bytes()))
+                .into(),
         }
     }
 }

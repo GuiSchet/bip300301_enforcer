@@ -6,7 +6,6 @@ use std::{
     time::Instant,
 };
 
-use async_broadcast::{Sender, TrySendError};
 use bitcoin::{
     Amount, Block, BlockHash, Network, OutPoint, Transaction, Txid, Work,
     hashes::{Hash as _, sha256d},
@@ -21,6 +20,7 @@ use jsonrpsee::core::{
 use sneed::{RoTxn, RwTxn, db};
 use tokio_util::sync::CancellationToken;
 
+use super::observation::{CommittedEventSender, EventSender};
 use crate::{
     messages::{
         CoinbaseMessage, CoinbaseMessages, M1ProposeSidechain, M2AckSidechain, M3ProposeBundle,
@@ -1108,6 +1108,7 @@ impl BlockHandler<'_> {
             prev_block_hash: parent,
             height,
             work: block.header.work(),
+            cumulative_work: None,
             timestamp: block.header.time,
         };
         // Everything below activation height is plain Bitcoin history. We need
@@ -1291,7 +1292,7 @@ impl BlockHandler<'_> {
     fn record_block(
         &self,
         rwtxn: &mut RwTxn,
-        header_info: HeaderInfo,
+        mut header_info: HeaderInfo,
         block_info: BlockInfo,
         block_diff: diff::Block,
     ) -> Result<Event, error::ConnectBlock> {
@@ -1318,6 +1319,8 @@ impl BlockHandler<'_> {
             dbs.current_chain_tip.put(rwtxn, &(), &block_hash)?;
             tracing::trace!("updated current chain tip: {}", header_info.height);
         }
+        dbs.advance_observation_revision(rwtxn)?;
+        header_info.cumulative_work = Some(cumulative_work);
         let event = Event::ConnectBlock {
             header_info,
             block_info,
@@ -1359,6 +1362,7 @@ impl BlockHandler<'_> {
         } else {
             dbs.current_chain_tip.delete(rwtxn, &())?;
         }
+        dbs.advance_observation_revision(rwtxn)?;
         events.push(Event::DisconnectBlock { block_hash });
         Ok(())
     }
@@ -1385,9 +1389,12 @@ fn empty_block_info_and_diff(coinbase_txid: Txid) -> (BlockInfo, diff::Block) {
 }
 
 /// Broadcast events for state that has already been committed.
-pub(in crate::validator) fn broadcast_events(event_tx: &Sender<Event>, events: Vec<Event>) {
+pub(in crate::validator) fn broadcast_events(
+    event_tx: &impl CommittedEventSender,
+    events: Vec<Event>,
+) {
     for event in events {
-        let _send_err: Result<Option<_>, TrySendError<_>> = event_tx.try_broadcast(event);
+        event_tx.publish(event);
     }
 }
 
@@ -1833,7 +1840,7 @@ impl BlockHandler<'_> {
         &self,
         mut rwtxn: RwTxn<'_>,
         blocks: &[Block],
-        event_tx: &Sender<Event>,
+        event_tx: &impl CommittedEventSender,
     ) -> Result<Option<InvalidBlock>, error::Sync> {
         let mut events = Vec::new();
         let invalid_block = self.handle_block_batch(&mut rwtxn, blocks, &mut events)?;
@@ -2018,7 +2025,7 @@ impl BlockHandler<'_> {
     /// bodies are fetched. Returns the number of blocks connected.
     fn connect_pre_activation_blocks(
         &self,
-        event_tx: &Sender<Event>,
+        event_tx: &impl CommittedEventSender,
         missing_blocks: &mut Vec<BlockHash>,
         cancel: &CancellationToken,
     ) -> Result<usize, error::Sync> {
@@ -2072,7 +2079,7 @@ impl BlockHandler<'_> {
     #[tracing::instrument(skip_all)]
     async fn sync_blocks<MainRpcClient>(
         &self,
-        event_tx: &Sender<Event>,
+        event_tx: &impl CommittedEventSender,
         main_rpc_client: &MainRpcClient,
         main_blocks_dir: Option<PathBuf>,
         main_tip: BlockHash,
@@ -2284,7 +2291,7 @@ impl BlockHandler<'_> {
 pub struct SyncSignals {
     pub cancel: CancellationToken,
     pub header_sync_progress_tx: tokio::sync::watch::Sender<HeaderSyncProgress>,
-    pub event_tx: Sender<Event>,
+    pub event_tx: EventSender,
 }
 
 impl BlockHandler<'_> {

@@ -7,10 +7,7 @@ use bitcoin::{Block, BlockHash, hashes::Hash};
 use tokio_util::sync::CancellationToken;
 
 use super::BlockHandler;
-use crate::{
-    types::Event,
-    validator::{parse_block_files, task::error},
-};
+use crate::validator::{parse_block_files, task::error};
 
 /// Simple LRU-style cache for temporarily storing blocks read from disk
 /// that don't match the current expected block hash.
@@ -92,7 +89,7 @@ fn restore_pending_blocks(missing_blocks: &mut Vec<BlockHash>, pending_blocks: &
 /// connected and file sync may continue.
 fn connect_pending_blocks(
     handler: &BlockHandler<'_>,
-    event_tx: &async_broadcast::Sender<Event>,
+    event_tx: &impl crate::validator::observation::CommittedEventSender,
     missing_blocks: &mut Vec<BlockHash>,
     pending_blocks: &mut Vec<Block>,
     total_handled_blocks: &mut usize,
@@ -123,7 +120,7 @@ fn connect_pending_blocks(
 /// `false` if the validator rejected a block and file sync should stop.
 fn process_cached_blocks(
     handler: &BlockHandler<'_>,
-    event_tx: &async_broadcast::Sender<Event>,
+    event_tx: &impl crate::validator::observation::CommittedEventSender,
     block_cache: &mut BlockCache,
     missing_blocks: &mut Vec<BlockHash>,
     pending_blocks: &mut Vec<Block>,
@@ -174,7 +171,7 @@ fn process_cached_blocks(
 #[tracing::instrument(skip_all)]
 pub fn sync_from_directory(
     handler: &BlockHandler<'_>,
-    event_tx: &async_broadcast::Sender<Event>,
+    event_tx: &impl crate::validator::observation::CommittedEventSender,
     missing_blocks: &mut Vec<BlockHash>,
     main_blocks_dir: PathBuf,
     cancel: CancellationToken,
@@ -204,7 +201,7 @@ pub fn sync_from_directory(
 
 fn sync_from_directory_inner(
     handler: &BlockHandler<'_>,
-    event_tx: &async_broadcast::Sender<Event>,
+    event_tx: &impl crate::validator::observation::CommittedEventSender,
     missing_blocks: &mut Vec<BlockHash>,
     pending_blocks: &mut Vec<Block>,
     main_blocks_dir: PathBuf,

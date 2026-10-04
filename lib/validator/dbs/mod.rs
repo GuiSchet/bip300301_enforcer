@@ -327,13 +327,14 @@ pub(super) struct Dbs {
     pub block_hashes: BlockHashDbs,
     /// Tip that the enforcer is synced to
     pub current_chain_tip: DatabaseUnique<UnitKey, SerdeBincode<bitcoin::BlockHash>>,
+    pub observation_revision: DatabaseUnique<UnitKey, SerdeBincode<u64>>,
     pub _leading_by_50: DatabaseUnique<UnitKey, SerdeBincode<Vec<[u8; 32]>>>,
     pub _previous_votes: DatabaseUnique<UnitKey, SerdeBincode<Vec<[u8; 32]>>>,
     pub proposal_id_to_sidechain: ProposalIdToSidechain,
 }
 
 impl Dbs {
-    const NUM_DBS: u32 = ActiveSidechainDbs::NUM_DBS + BlockHashDbs::NUM_DBS + 4;
+    const NUM_DBS: u32 = ActiveSidechainDbs::NUM_DBS + BlockHashDbs::NUM_DBS + 5;
 
     pub fn new(data_dir: &Path, network: bitcoin::Network) -> Result<Self, CreateDbsError> {
         let db_dir = data_dir.join(format!("{network}.mdb"));
@@ -356,6 +357,8 @@ impl Dbs {
         let mut rwtxn = env.write_txn()?;
         let active_sidechains = ActiveSidechainDbs::new(&env, &mut rwtxn)?;
         let block_hashes = BlockHashDbs::new(&env, &mut rwtxn)?;
+        let observation_revision =
+            DatabaseUnique::create(&env, &mut rwtxn, "observation_revision")?;
         let current_chain_tip = DatabaseUnique::create(&env, &mut rwtxn, "current_chain_tip")?;
         let leading_by_50 = DatabaseUnique::create(&env, &mut rwtxn, "leading_by_50")?;
         let previous_votes = DatabaseUnique::create(&env, &mut rwtxn, "previous_votes")?;
@@ -369,10 +372,22 @@ impl Dbs {
             active_sidechains,
             block_hashes,
             current_chain_tip,
+            observation_revision,
             _leading_by_50: leading_by_50,
             _previous_votes: previous_votes,
             proposal_id_to_sidechain,
         })
+    }
+
+    pub fn advance_observation_revision(&self, txn: &mut RwTxn<'_>) -> Result<(), db::Error> {
+        let next = self
+            .observation_revision
+            .try_get(txn, &())?
+            .unwrap_or(0)
+            .checked_add(1)
+            .expect("chain revision exhausted");
+        self.observation_revision.put(txn, &(), &next)?;
+        Ok(())
     }
 
     pub fn read_txn(&self) -> Result<RoTxn<'_, heed::WithTls>, env::error::ReadTxn> {

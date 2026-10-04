@@ -2272,6 +2272,30 @@ where
     }
 }
 
+///Shorthand for `OwnedView<GetConfirmedBmmFeesRequestView<'static>>`.
+pub type OwnedGetConfirmedBmmFeesRequestView = ::buffa::view::OwnedView<
+    crate::proto::generated::buffa::cusf::mainchain::v1::__buffa::view::GetConfirmedBmmFeesRequestView<
+        'static,
+    >,
+>;
+///Shorthand for `OwnedView<GetConfirmedBmmFeesResponseView<'static>>`.
+pub type OwnedGetConfirmedBmmFeesResponseView = ::buffa::view::OwnedView<
+    crate::proto::generated::buffa::cusf::mainchain::v1::__buffa::view::GetConfirmedBmmFeesResponseView<
+        'static,
+    >,
+>;
+///Shorthand for `OwnedView<SubscribeMainchainEventsRequestView<'static>>`.
+pub type OwnedSubscribeMainchainEventsRequestView = ::buffa::view::OwnedView<
+    crate::proto::generated::buffa::cusf::mainchain::v1::__buffa::view::SubscribeMainchainEventsRequestView<
+        'static,
+    >,
+>;
+///Shorthand for `OwnedView<SubscribeMainchainEventsResponseView<'static>>`.
+pub type OwnedSubscribeMainchainEventsResponseView = ::buffa::view::OwnedView<
+    crate::proto::generated::buffa::cusf::mainchain::v1::__buffa::view::SubscribeMainchainEventsResponseView<
+        'static,
+    >,
+>;
 ///Shorthand for `OwnedView<GetBlockHeaderInfoRequestView<'static>>`.
 pub type OwnedGetBlockHeaderInfoRequestView = ::buffa::view::OwnedView<
     crate::proto::generated::buffa::cusf::mainchain::v1::__buffa::view::GetBlockHeaderInfoRequestView<
@@ -2464,6 +2488,90 @@ pub type OwnedStopResponseView = ::buffa::view::OwnedView<
         'static,
     >,
 >;
+impl ::connectrpc::Encodable<
+    crate::proto::generated::buffa::cusf::mainchain::v1::GetConfirmedBmmFeesResponse,
+>
+for crate::proto::generated::buffa::cusf::mainchain::v1::__buffa::view::GetConfirmedBmmFeesResponseView<
+    '_,
+> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self, codec)
+    }
+}
+impl ::connectrpc::Encodable<
+    crate::proto::generated::buffa::cusf::mainchain::v1::GetConfirmedBmmFeesResponse,
+>
+for ::buffa::view::OwnedView<
+    crate::proto::generated::buffa::cusf::mainchain::v1::__buffa::view::GetConfirmedBmmFeesResponseView<
+        'static,
+    >,
+> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self.reborrow(), codec)
+    }
+    /// An `OwnedView` still holds the buffer it was decoded from, so
+    /// its large fields can be handed to the response body by
+    /// reference count instead of copied. The bare view impl above
+    /// cannot do this: it has borrows but no buffer to name.
+    fn encode_segments(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::connectrpc::EncodedBody, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body_segments(
+            self.reborrow(),
+            self.bytes(),
+            codec,
+        )
+    }
+}
+impl ::connectrpc::Encodable<
+    crate::proto::generated::buffa::cusf::mainchain::v1::SubscribeMainchainEventsResponse,
+>
+for crate::proto::generated::buffa::cusf::mainchain::v1::__buffa::view::SubscribeMainchainEventsResponseView<
+    '_,
+> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self, codec)
+    }
+}
+impl ::connectrpc::Encodable<
+    crate::proto::generated::buffa::cusf::mainchain::v1::SubscribeMainchainEventsResponse,
+>
+for ::buffa::view::OwnedView<
+    crate::proto::generated::buffa::cusf::mainchain::v1::__buffa::view::SubscribeMainchainEventsResponseView<
+        'static,
+    >,
+> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self.reborrow(), codec)
+    }
+    /// An `OwnedView` still holds the buffer it was decoded from, so
+    /// its large fields can be handed to the response body by
+    /// reference count instead of copied. The bare view impl above
+    /// cannot do this: it has borrows but no buffer to name.
+    fn encode_segments(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::connectrpc::EncodedBody, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body_segments(
+            self.reborrow(),
+            self.bytes(),
+            codec,
+        )
+    }
+}
 impl ::connectrpc::Encodable<
     crate::proto::generated::buffa::cusf::mainchain::v1::GetBlockHeaderInfoResponse,
 >
@@ -3138,6 +3246,18 @@ for ::buffa::view::OwnedView<
 }
 /// Full service name for this service.
 pub const VALIDATOR_SERVICE_SERVICE_NAME: &str = "cusf.mainchain.v1.ValidatorService";
+/// Static [`Spec`](::connectrpc::Spec) for the `GetConfirmedBmmFees` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
+pub const VALIDATOR_SERVICE_GET_CONFIRMED_BMM_FEES_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
+        "/cusf.mainchain.v1.ValidatorService/GetConfirmedBmmFees",
+        ::connectrpc::StreamType::Unary,
+    )
+    .with_idempotency_level(::connectrpc::IdempotencyLevel::NoSideEffects);
+/// Static [`Spec`](::connectrpc::Spec) for the `SubscribeMainchainEvents` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
+pub const VALIDATOR_SERVICE_SUBSCRIBE_MAINCHAIN_EVENTS_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
+        "/cusf.mainchain.v1.ValidatorService/SubscribeMainchainEvents",
+        ::connectrpc::StreamType::ServerStream,
+    )
+    .with_idempotency_level(::connectrpc::IdempotencyLevel::NoSideEffects);
 /// Static [`Spec`](::connectrpc::Spec) for the `GetBlockHeaderInfo` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const VALIDATOR_SERVICE_GET_BLOCK_HEADER_INFO_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
         "/cusf.mainchain.v1.ValidatorService/GetBlockHeaderInfo",
@@ -3285,6 +3405,52 @@ pub const VALIDATOR_SERVICE_STOP_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::
 /// example` doc.
 #[allow(clippy::type_complexity)]
 pub trait ValidatorService: Send + Sync + 'static {
+    /// Optional independent enrichment. Does not change immutable block deltas.
+    ///
+    /// `'a` lets the response body borrow from `&self` (e.g. server-resident state).
+    ///
+    /// `request` is borrowed from the request body and is valid for the
+    /// duration of the call; message fields are read directly on it
+    /// (zero-copy). The response cannot borrow from `request` — use
+    /// `.to_owned_message()` (or copy the specific fields) for anything
+    /// returned, stored, or moved into `tokio::spawn`.
+    fn get_confirmed_bmm_fees<'a>(
+        &'a self,
+        ctx: ::connectrpc::RequestContext,
+        request: ::connectrpc::ServiceRequest<
+            '_,
+            crate::proto::generated::buffa::cusf::mainchain::v1::GetConfirmedBmmFeesRequest,
+        >,
+    ) -> impl ::std::future::Future<
+        Output = ::connectrpc::ServiceResult<
+            impl ::connectrpc::Encodable<
+                crate::proto::generated::buffa::cusf::mainchain::v1::GetConfirmedBmmFeesResponse,
+            > + Send + use<'a, Self>,
+        >,
+    > + Send;
+    /// Global committed transitions, including periods without active sidechains.
+    ///
+    /// `request` is borrowed from the request body and is valid for the
+    /// duration of the call (until the response stream is returned);
+    /// message fields are read directly on it (zero-copy). Data the
+    /// returned stream needs must be copied out or converted via
+    /// `.to_owned_message()`.
+    fn subscribe_mainchain_events(
+        &self,
+        ctx: ::connectrpc::RequestContext,
+        request: ::connectrpc::ServiceRequest<
+            '_,
+            crate::proto::generated::buffa::cusf::mainchain::v1::SubscribeMainchainEventsRequest,
+        >,
+    ) -> impl ::std::future::Future<
+        Output = ::connectrpc::ServiceResult<
+            ::connectrpc::ServiceStream<
+                impl ::connectrpc::Encodable<
+                    crate::proto::generated::buffa::cusf::mainchain::v1::SubscribeMainchainEventsResponse,
+                > + Send + use<Self>,
+            >,
+        >,
+    > + Send;
     /// Fetches information about a specific mainchain block header,
     /// and optionally, it's ancestors
     ///
@@ -3692,6 +3858,63 @@ impl<S: ValidatorService> ValidatorServiceExt for S {
         router: ::connectrpc::Router,
     ) -> ::connectrpc::Router {
         router
+            .route_view_idempotent(
+                VALIDATOR_SERVICE_SERVICE_NAME,
+                "GetConfirmedBmmFees",
+                {
+                    let svc = ::std::sync::Arc::clone(&self);
+                    ::connectrpc::view_handler_fn(move |
+                        ctx,
+                        req: ::buffa::view::OwnedView<
+                            crate::proto::generated::buffa::cusf::mainchain::v1::__buffa::view::GetConfirmedBmmFeesRequestView<
+                                'static,
+                            >,
+                        >,
+                        format|
+                    {
+                        let svc = ::std::sync::Arc::clone(&svc);
+                        async move {
+                            let sreq = ::connectrpc::ServiceRequest::<
+                                crate::proto::generated::buffa::cusf::mainchain::v1::GetConfirmedBmmFeesRequest,
+                            >::from_parts(req.reborrow(), req.bytes());
+                            svc.get_confirmed_bmm_fees(ctx, sreq)
+                                .await?
+                                .encode::<
+                                    crate::proto::generated::buffa::cusf::mainchain::v1::GetConfirmedBmmFeesResponse,
+                                >(format)
+                        }
+                    })
+                },
+            )
+            .with_spec(VALIDATOR_SERVICE_GET_CONFIRMED_BMM_FEES_SPEC)
+            .route_view_server_stream::<
+                _,
+                _,
+                crate::proto::generated::buffa::cusf::mainchain::v1::SubscribeMainchainEventsResponse,
+            >(
+                VALIDATOR_SERVICE_SERVICE_NAME,
+                "SubscribeMainchainEvents",
+                ::connectrpc::view_streaming_handler_fn({
+                    let svc = ::std::sync::Arc::clone(&self);
+                    move |
+                        ctx,
+                        req: ::buffa::view::OwnedView<
+                            crate::proto::generated::buffa::cusf::mainchain::v1::__buffa::view::SubscribeMainchainEventsRequestView<
+                                'static,
+                            >,
+                        >|
+                    {
+                        let svc = ::std::sync::Arc::clone(&svc);
+                        async move {
+                            let sreq = ::connectrpc::ServiceRequest::<
+                                crate::proto::generated::buffa::cusf::mainchain::v1::SubscribeMainchainEventsRequest,
+                            >::from_parts(req.reborrow(), req.bytes());
+                            svc.subscribe_mainchain_events(ctx, sreq).await
+                        }
+                    }
+                }),
+            )
+            .with_spec(VALIDATOR_SERVICE_SUBSCRIBE_MAINCHAIN_EVENTS_SPEC)
             .route_view_idempotent(
                 VALIDATOR_SERVICE_SERVICE_NAME,
                 "GetBlockHeaderInfo",
@@ -4208,6 +4431,18 @@ impl<T: ValidatorService> ::connectrpc::Dispatcher for ValidatorServiceServer<T>
     ) -> Option<::connectrpc::dispatcher::codegen::MethodDescriptor> {
         let method = path.strip_prefix("cusf.mainchain.v1.ValidatorService/")?;
         match method {
+            "GetConfirmedBmmFees" => {
+                Some(
+                    ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(true)
+                        .with_spec(VALIDATOR_SERVICE_GET_CONFIRMED_BMM_FEES_SPEC),
+                )
+            }
+            "SubscribeMainchainEvents" => {
+                Some(
+                    ::connectrpc::dispatcher::codegen::MethodDescriptor::server_streaming()
+                        .with_spec(VALIDATOR_SERVICE_SUBSCRIBE_MAINCHAIN_EVENTS_SPEC),
+                )
+            }
             "GetBlockHeaderInfo" => {
                 Some(
                     ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(true)
@@ -4321,6 +4556,28 @@ impl<T: ValidatorService> ::connectrpc::Dispatcher for ValidatorServiceServer<T>
         };
         let _ = (&ctx, &request, &format);
         match method {
+            "GetConfirmedBmmFees" => {
+                let svc = ::std::sync::Arc::clone(&self.inner);
+                Box::pin(async move {
+                    let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
+                        crate::proto::generated::buffa::cusf::mainchain::v1::GetConfirmedBmmFeesRequest,
+                    >(request.encoded()?, format)?;
+                    let req: crate::proto::generated::buffa::cusf::mainchain::v1::__buffa::view::GetConfirmedBmmFeesRequestView<
+                        '_,
+                    > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
+                        &body,
+                        ctx.decode_options(),
+                    )?;
+                    let req = ::connectrpc::ServiceRequest::<
+                        crate::proto::generated::buffa::cusf::mainchain::v1::GetConfirmedBmmFeesRequest,
+                    >::from_parts(&req, &body);
+                    svc.get_confirmed_bmm_fees(ctx, req)
+                        .await?
+                        .encode::<
+                            crate::proto::generated::buffa::cusf::mainchain::v1::GetConfirmedBmmFeesResponse,
+                        >(format)
+                })
+            }
             "GetBlockHeaderInfo" => {
                 let svc = ::std::sync::Arc::clone(&self.inner);
                 Box::pin(async move {
@@ -4644,6 +4901,32 @@ impl<T: ValidatorService> ::connectrpc::Dispatcher for ValidatorServiceServer<T>
         };
         let _ = (&ctx, &request, &format);
         match method {
+            "SubscribeMainchainEvents" => {
+                let svc = ::std::sync::Arc::clone(&self.inner);
+                Box::pin(async move {
+                    let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
+                        crate::proto::generated::buffa::cusf::mainchain::v1::SubscribeMainchainEventsRequest,
+                    >(request, format)?;
+                    let req: crate::proto::generated::buffa::cusf::mainchain::v1::__buffa::view::SubscribeMainchainEventsRequestView<
+                        '_,
+                    > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
+                        &body,
+                        ctx.decode_options(),
+                    )?;
+                    let req = ::connectrpc::ServiceRequest::<
+                        crate::proto::generated::buffa::cusf::mainchain::v1::SubscribeMainchainEventsRequest,
+                    >::from_parts(&req, &body);
+                    let resp = svc.subscribe_mainchain_events(ctx, req).await?;
+                    Ok(
+                        resp
+                            .map_body(|s| ::connectrpc::dispatcher::codegen::encode_response_stream::<
+                                crate::proto::generated::buffa::cusf::mainchain::v1::SubscribeMainchainEventsResponse,
+                                _,
+                                _,
+                            >(s, format)),
+                    )
+                })
+            }
             "SubscribeEvents" => {
                 let svc = ::std::sync::Arc::clone(&self.inner);
                 Box::pin(async move {
@@ -4748,7 +5031,7 @@ impl<T: ValidatorService> ::connectrpc::Dispatcher for ValidatorServiceServer<T>
 /// let config = ClientConfig::new(uri).with_protocol(Protocol::Grpc);
 ///
 /// let client = ValidatorServiceClient::new(conn, config);
-/// let response = client.get_block_header_info(request).await?;
+/// let response = client.get_confirmed_bmm_fees(request).await?;
 /// ```
 ///
 /// # Example (Connect / HTTP/1.1 or ALPN)
@@ -4760,7 +5043,7 @@ impl<T: ValidatorService> ::connectrpc::Dispatcher for ValidatorServiceServer<T>
 /// let config = ClientConfig::new("http://localhost:8080".parse()?);
 ///
 /// let client = ValidatorServiceClient::new(http, config);
-/// let response = client.get_block_header_info(request).await?;
+/// let response = client.get_confirmed_bmm_fees(request).await?;
 /// ```
 ///
 /// # Working with the response
@@ -4770,7 +5053,7 @@ impl<T: ValidatorService> ::connectrpc::Dispatcher for ValidatorServiceServer<T>
 /// message, so field access is zero-copy:
 ///
 /// ```rust,ignore
-/// let resp = client.get_block_header_info(request).await?;
+/// let resp = client.get_confirmed_bmm_fees(request).await?;
 /// let name: &str = resp.view().name;  // borrow into the response buffer
 /// ```
 ///
@@ -4778,7 +5061,7 @@ impl<T: ValidatorService> ::connectrpc::Dispatcher for ValidatorServiceServer<T>
 /// [`into_owned()`](::connectrpc::client::UnaryResponse::into_owned):
 ///
 /// ```rust,ignore
-/// let owned = client.get_block_header_info(request).await?.into_owned();
+/// let owned = client.get_confirmed_bmm_fees(request).await?.into_owned();
 /// ```
 ///
 /// [`into_view()`](::connectrpc::client::UnaryResponse::into_view) keeps the
@@ -4808,6 +5091,94 @@ where
     /// Get a mutable reference to the client configuration.
     pub fn config_mut(&mut self) -> &mut ::connectrpc::client::ClientConfig {
         &mut self.config
+    }
+    /// Call the GetConfirmedBmmFees RPC. Sends a request to /cusf.mainchain.v1.ValidatorService/GetConfirmedBmmFees.
+    pub async fn get_confirmed_bmm_fees(
+        &self,
+        request: crate::proto::generated::buffa::cusf::mainchain::v1::GetConfirmedBmmFeesRequest,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::generated::buffa::cusf::mainchain::v1::__buffa::view::GetConfirmedBmmFeesResponseView<
+                    'static,
+                >,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        self.get_confirmed_bmm_fees_with_options(
+                request,
+                ::connectrpc::client::CallOptions::default(),
+            )
+            .await
+    }
+    /// Call the GetConfirmedBmmFees RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
+    pub async fn get_confirmed_bmm_fees_with_options(
+        &self,
+        request: crate::proto::generated::buffa::cusf::mainchain::v1::GetConfirmedBmmFeesRequest,
+        options: ::connectrpc::client::CallOptions,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::generated::buffa::cusf::mainchain::v1::__buffa::view::GetConfirmedBmmFeesResponseView<
+                    'static,
+                >,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        ::connectrpc::client::call_unary(
+                &self.transport,
+                &self.config,
+                VALIDATOR_SERVICE_GET_CONFIRMED_BMM_FEES_SPEC
+                    .with_origin(::connectrpc::SpecOrigin::Client),
+                request,
+                options,
+            )
+            .await
+    }
+    /// Call the SubscribeMainchainEvents RPC. Sends a request to /cusf.mainchain.v1.ValidatorService/SubscribeMainchainEvents.
+    pub async fn subscribe_mainchain_events(
+        &self,
+        request: crate::proto::generated::buffa::cusf::mainchain::v1::SubscribeMainchainEventsRequest,
+    ) -> Result<
+        ::connectrpc::client::ServerStream<
+            T::ResponseBody,
+            crate::proto::generated::buffa::cusf::mainchain::v1::__buffa::view::SubscribeMainchainEventsResponseView<
+                'static,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        self.subscribe_mainchain_events_with_options(
+                request,
+                ::connectrpc::client::CallOptions::default(),
+            )
+            .await
+    }
+    /// Call the SubscribeMainchainEvents RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
+    pub async fn subscribe_mainchain_events_with_options(
+        &self,
+        request: crate::proto::generated::buffa::cusf::mainchain::v1::SubscribeMainchainEventsRequest,
+        options: ::connectrpc::client::CallOptions,
+    ) -> Result<
+        ::connectrpc::client::ServerStream<
+            T::ResponseBody,
+            crate::proto::generated::buffa::cusf::mainchain::v1::__buffa::view::SubscribeMainchainEventsResponseView<
+                'static,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        ::connectrpc::client::call_server_stream(
+                &self.transport,
+                &self.config,
+                VALIDATOR_SERVICE_SUBSCRIBE_MAINCHAIN_EVENTS_SPEC
+                    .with_origin(::connectrpc::SpecOrigin::Client),
+                request,
+                options,
+            )
+            .await
     }
     /// Call the GetBlockHeaderInfo RPC. Sends a request to /cusf.mainchain.v1.ValidatorService/GetBlockHeaderInfo.
     pub async fn get_block_header_info(

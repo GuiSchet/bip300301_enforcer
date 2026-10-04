@@ -17,22 +17,23 @@ use crate::{
         ToStatus as _,
         common::{ConsensusHex, Hex, ReverseHex},
         mainchain::{
-            Bip300BlockDelta, Bip300CoinbaseMessage, ConfirmedBmmRequest,
+            Bip300BlockDelta, Bip300CoinbaseMessage, ConfirmedBmmFee, ConfirmedBmmRequest,
             GetBip300BlockDeltaRequest, GetBip300BlockDeltaResponse, GetBlockHeaderInfoRequest,
             GetBlockHeaderInfoResponse, GetBlockInfoRequest, GetBlockInfoResponse,
             GetBmmHStarCommitmentRequest, GetBmmHStarCommitmentResponse, GetChainInfoRequest,
             GetChainInfoResponse, GetChainTipRequest, GetChainTipResponse, GetCoinbasePSBTRequest,
-            GetCoinbasePSBTResponse, GetCtipRequest, GetCtipResponse, GetSeenBmmRequestsRequest,
-            GetSeenBmmRequestsResponse, GetSidechainProposalsRequest,
-            GetSidechainProposalsResponse, GetSidechainsRequest, GetSidechainsResponse,
-            GetTwoWayPegDataRequest, GetTwoWayPegDataResponse, GetWithdrawalBundleProposalsRequest,
-            GetWithdrawalBundleProposalsResponse, M1Delta, M2Delta, M3Delta, M4Delta, M7Delta,
-            Network, StopRequest, StopResponse, SubscribeEventsRequest, SubscribeEventsResponse,
-            SubscribeHeaderSyncProgressRequest, SubscribeHeaderSyncProgressResponse, TreasuryCtip,
-            TreasuryTransition, bip300coinbase_message, get_block_info_response,
-            get_bmm_h_star_commitment_response, get_chain_info_response::Bip300Constants,
-            get_ctip_response::Ctip, get_seen_bmm_requests_response,
-            get_sidechain_proposals_response::SidechainProposal,
+            GetCoinbasePSBTResponse, GetConfirmedBmmFeesRequest, GetConfirmedBmmFeesResponse,
+            GetCtipRequest, GetCtipResponse, GetSeenBmmRequestsRequest, GetSeenBmmRequestsResponse,
+            GetSidechainProposalsRequest, GetSidechainProposalsResponse, GetSidechainsRequest,
+            GetSidechainsResponse, GetTwoWayPegDataRequest, GetTwoWayPegDataResponse,
+            GetWithdrawalBundleProposalsRequest, GetWithdrawalBundleProposalsResponse, M1Delta,
+            M2Delta, M3Delta, M4Delta, M7Delta, Network, StopRequest, StopResponse,
+            SubscribeEventsRequest, SubscribeEventsResponse, SubscribeHeaderSyncProgressRequest,
+            SubscribeHeaderSyncProgressResponse, SubscribeMainchainEventsRequest,
+            SubscribeMainchainEventsResponse, TreasuryCtip, TreasuryTransition,
+            bip300coinbase_message, get_block_info_response, get_bmm_h_star_commitment_response,
+            get_chain_info_response::Bip300Constants, get_ctip_response::Ctip,
+            get_seen_bmm_requests_response, get_sidechain_proposals_response::SidechainProposal,
             get_sidechains_response::SidechainInfo, get_withdrawal_bundle_proposals_response,
             m2delta, m4delta, treasury_transition,
         },
@@ -591,6 +592,83 @@ impl ValidatorService for Server {
         Ok(Response::new(GetBip300BlockDeltaResponse { deltas }))
     }
 
+    async fn get_confirmed_bmm_fees(
+        &self,
+        _ctx: RequestContext,
+        request: ServiceRequest<'_, GetConfirmedBmmFeesRequest>,
+    ) -> ServiceResult<GetConfirmedBmmFeesResponse> {
+        let hash: BlockHash = request
+            .to_owned_message()
+            .block_hash
+            .into_option()
+            .ok_or_else(|| missing_field::<GetConfirmedBmmFeesRequest>("block_hash"))?
+            .decode_status::<GetConfirmedBmmFeesRequest, _>("block_hash")?;
+        let header = self
+            .validator
+            .get_header_info(&hash)
+            .map_err(internal_err)?;
+        let info = self.validator.get_block_info(&hash).map_err(internal_err)?;
+        let block = self
+            .validator
+            .get_raw_block(hash)
+            .await
+            .map_err(internal_err)?;
+        if block.block_hash() != hash {
+            return Err(ConnectError::internal("node returned a different block"));
+        }
+        let confirmed = self.confirmed_bmm_requests(&block, &info);
+        let details = self
+            .validator
+            .get_block_with_prevouts(hash)
+            .await
+            .map_err(internal_err)?;
+        if details["hash"].as_str() != Some(&hash.to_string()) {
+            return Err(ConnectError::internal(
+                "node fee response belongs to a different block",
+            ));
+        }
+        let transactions = details["tx"]
+            .as_array()
+            .ok_or_else(|| ConnectError::internal("node block has no transactions"))?;
+        let mut fees = Vec::with_capacity(confirmed.len());
+        for request in confirmed {
+            let txid = request
+                .txid
+                .as_option()
+                .ok_or_else(|| ConnectError::internal("confirmed BMM missing txid"))?;
+            let id = &txid
+                .hex
+                .as_option()
+                .ok_or_else(|| ConnectError::internal("confirmed BMM missing txid hex"))?
+                .value;
+            let transaction = transactions
+                .iter()
+                .find(|tx| tx["txid"].as_str() == Some(id.as_str()))
+                .ok_or_else(|| {
+                    ConnectError::internal("node fee response omitted a confirmed transaction")
+                })?;
+            let fee_sats = transaction
+                .get("fee")
+                .map(|fee| exact_fee_sats(&fee.to_string()))
+                .transpose()?;
+            fees.push(ConfirmedBmmFee {
+                sidechain_number: request.sidechain_number,
+                txid: request.txid,
+                fee_sats,
+                unavailable_reason: if fee_sats.is_some() {
+                    String::new()
+                } else {
+                    "historical_prevouts_unavailable".into()
+                },
+            });
+        }
+        Ok(Response::new(GetConfirmedBmmFeesResponse {
+            header_info: MessageField::some(header.into()),
+            fees,
+            source: "ecash-node:getblock:3".into(),
+        }))
+    }
+
     async fn get_bmm_h_star_commitment(
         &self,
         _ctx: RequestContext,
@@ -687,19 +765,15 @@ impl ValidatorService for Server {
         _ctx: RequestContext,
         _request: ServiceRequest<'_, GetChainTipRequest>,
     ) -> ServiceResult<GetChainTipResponse> {
-        let Some(tip_hash) = self
+        let (header, chain_revision) = self
             .validator
-            .try_get_mainchain_tip()
-            .map_err(|err| err.builder().to_connect_error())?
-        else {
-            return Err(ConnectError::unavailable("Validator is not synced"));
-        };
-        let header_info = self
-            .validator
-            .get_header_info(&tip_hash)
-            .map_err(internal_err)?;
+            .observed_chain_tip()
+            .map_err(|err| ConnectError::internal(err.to_string()))?;
+        let header = header.ok_or_else(|| ConnectError::unavailable("Validator is not synced"))?;
         Ok(Response::new(GetChainTipResponse {
-            block_header_info: MessageField::some(header_info.into()),
+            block_header_info: MessageField::some(header.into()),
+            observer_session: self.validator.mempool_readiness.session().to_owned(),
+            chain_revision,
         }))
     }
 
@@ -792,7 +866,16 @@ impl ValidatorService for Server {
         _ctx: RequestContext,
         request: ServiceRequest<'_, GetSeenBmmRequestsRequest>,
     ) -> ServiceResult<GetSeenBmmRequestsResponse> {
-        use crate::proto::mainchain::GetSeenBmmRequestsRequest;
+        use crate::{
+            proto::mainchain::GetSeenBmmRequestsRequest, validator::observation::NotReady,
+        };
+        let readiness = &self.validator.mempool_readiness;
+        let generation = readiness.ready_generation().map_err(|state| match state {
+            NotReady::Disabled => {
+                ConnectError::failed_precondition("mempool observation is disabled")
+            }
+            NotReady::Synchronizing => ConnectError::unavailable("mempool is synchronizing"),
+        })?;
         let GetSeenBmmRequestsRequest {
             prev_block_hash,
             sidechain_number,
@@ -812,6 +895,10 @@ impl ValidatorService for Server {
                 )
             })?),
         };
+        let (_, revision_before) = self
+            .validator
+            .observed_chain_tip()
+            .map_err(|err| ConnectError::internal(err.to_string()))?;
         let seen = self
             .validator
             .get_seen_bmm_requests_for_parent_block(prev_block_hash)
@@ -843,7 +930,20 @@ impl ValidatorService for Server {
             }
         }
         requests.sort_by_key(|request| std::cmp::Reverse(request.bid_sats));
-        Ok(Response::new(GetSeenBmmRequestsResponse { requests }))
+        let (_, revision_after) = self
+            .validator
+            .observed_chain_tip()
+            .map_err(|err| ConnectError::internal(err.to_string()))?;
+        if readiness.ready_generation() != Ok(generation) || revision_before != revision_after {
+            return Err(ConnectError::unavailable(
+                "mempool generation changed during observation",
+            ));
+        }
+        Ok(Response::new(GetSeenBmmRequestsResponse {
+            requests,
+            observer_session: readiness.session().to_owned(),
+            mempool_generation: generation,
+        }))
     }
 
     async fn get_sidechain_proposals(
@@ -979,6 +1079,55 @@ impl ValidatorService for Server {
         Ok(Response::new(resp))
     }
 
+    async fn subscribe_mainchain_events(
+        &self,
+        _ctx: RequestContext,
+        _request: ServiceRequest<'_, SubscribeMainchainEventsRequest>,
+    ) -> ServiceResult<connectrpc::ServiceStream<SubscribeMainchainEventsResponse>> {
+        let (sequence, receiver) = self.validator.subscribe_mainchain_events();
+        let validator = self.validator.clone();
+        let session = validator.mempool_readiness.session().to_owned();
+        let initial = SubscribeMainchainEventsResponse {
+            observer_session: session.clone(),
+            sequence,
+            action: 3.into(),
+            header_info: MessageField::none(),
+        };
+        let events = futures::stream::try_unfold(
+            (receiver, validator, session),
+            |(mut receiver, validator, session)| async move {
+                let occurrence = match receiver.recv_direct().await {
+                    Ok(event) => event,
+                    Err(async_broadcast::RecvError::Closed) => return Ok(None),
+                    Err(async_broadcast::RecvError::Overflowed(_)) => {
+                        return Err(ConnectError::resource_exhausted(
+                            "mainchain observation gap; reconcile and resubscribe",
+                        ));
+                    }
+                };
+                let (action, header) = match occurrence.event {
+                    crate::types::Event::ConnectBlock { header_info, .. } => (1, header_info),
+                    crate::types::Event::DisconnectBlock { block_hash } => (
+                        2,
+                        validator
+                            .get_header_info(&block_hash)
+                            .map_err(internal_err)?,
+                    ),
+                };
+                let response = SubscribeMainchainEventsResponse {
+                    observer_session: session.clone(),
+                    sequence: occurrence.sequence,
+                    action: action.into(),
+                    header_info: MessageField::some(header.into()),
+                };
+                Ok(Some((response, (receiver, validator, session))))
+            },
+        );
+        Ok(Response::new(Box::pin(
+            futures::stream::once(async move { Ok(initial) }).chain(events),
+        )))
+    }
+
     async fn subscribe_events(
         &self,
         _ctx: RequestContext,
@@ -1045,5 +1194,66 @@ mod tests {
     #[test]
     fn proposal_age_is_tip_minus_proposal_height() {
         assert_eq!(proposal_age(25, 10), 15);
+    }
+}
+
+/// Parse Core's native-unit JSON number without an intermediate float.
+fn exact_fee_sats(decimal: &str) -> Result<u64, ConnectError> {
+    let invalid = || ConnectError::internal("node returned a non-integral or out-of-range fee");
+    let (mantissa, exponent) = match decimal.split_once(['e', 'E']) {
+        Some((m, e)) => (m, e.parse::<i32>().map_err(|_| invalid())?),
+        None => (decimal, 0),
+    };
+    if mantissa.starts_with('-') {
+        return Err(invalid());
+    }
+    let fractional = mantissa.split_once('.').map_or(0, |(_, f)| f.len());
+    let digits = mantissa.replace('.', "");
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(invalid());
+    }
+    let amount = digits.parse::<u128>().map_err(|_| invalid())?;
+    let scale = 8_i32
+        .checked_add(exponent)
+        .and_then(|s| s.checked_sub(i32::try_from(fractional).ok()?))
+        .ok_or_else(invalid)?;
+    let sats = if scale >= 0 {
+        amount
+            .checked_mul(10_u128.checked_pow(scale as u32).ok_or_else(invalid)?)
+            .ok_or_else(invalid)?
+    } else {
+        let divisor = 10_u128
+            .checked_pow(scale.unsigned_abs())
+            .ok_or_else(invalid)?;
+        if amount % divisor != 0 {
+            return Err(invalid());
+        }
+        amount / divisor
+    };
+    u64::try_from(sats).map_err(|_| invalid())
+}
+
+#[cfg(test)]
+mod exact_fee_tests {
+    use super::exact_fee_sats;
+    #[test]
+    fn fees_keep_every_satoshi_including_scientific_notation() {
+        for (value, expected) in [
+            ("0.00003948", 3948),
+            ("1e-8", 1),
+            ("0", 0),
+            ("184467440737.09551615", u64::MAX),
+        ] {
+            assert_eq!(exact_fee_sats(value).unwrap(), expected);
+        }
+        for value in [
+            "-0.00000001",
+            "1e-9",
+            "184467440737.09551616",
+            "NaN",
+            "1e999999",
+        ] {
+            assert!(exact_fee_sats(value).is_err(), "{value}");
+        }
     }
 }

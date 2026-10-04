@@ -22,7 +22,11 @@ use bip300301_enforcer_lib::{
     },
     rpc_client, server,
     types::NetworkParams,
-    validator::{SyncStateSummary, Validator, main_rest_client::MainRestClient},
+    validator::{
+        SyncStateSummary, Validator,
+        main_rest_client::MainRestClient,
+        observation::{MempoolAttempt, MempoolReadiness},
+    },
     version, wallet,
 };
 use bitcoin::ScriptBuf;
@@ -890,10 +894,12 @@ async fn sync_mempool<Enforcer, RpcClient>(
     zmq_addr_sequence: &str,
     mempool_dat: Option<&Path>,
     cancel: CancellationToken,
+    readiness: MempoolReadiness,
 ) -> Result<
     (
         cusf_enforcer_mempool::mempool::MempoolSync<Enforcer>,
         oneshot::Receiver<error::MempoolTask<Enforcer>>,
+        MempoolAttempt,
     ),
     error::MempoolTask<Enforcer>,
 >
@@ -901,6 +907,7 @@ where
     Enforcer: cusf_enforcer_mempool::cusf_enforcer::CusfEnforcer + Send + Sync + 'static,
     RpcClient: bitcoin_jsonrpsee::client::MainClient + Send + Sync + 'static,
 {
+    let attempt = readiness.begin();
     tracing::debug!(%zmq_addr_sequence, "Ensuring ZMQ address for mempool sync is reachable");
 
     match is_address_port_open(zmq_addr_sequence).await {
@@ -945,8 +952,10 @@ where
     };
 
     let (err_tx, err_rx) = oneshot::channel();
+    let generation = attempt.generation;
     let mempool =
-        cusf_enforcer_mempool::mempool::MempoolSync::new(enforcer, synced, |err| async move {
+        cusf_enforcer_mempool::mempool::MempoolSync::new(enforcer, synced, move |err| async move {
+            readiness.invalidate(generation);
             // The sync task reports an intentional shutdown as an error.
             // Dropping the sender without sending keeps that out of the error
             // channel, so a clean shutdown is never reported as a failure.
@@ -957,7 +966,8 @@ where
             let _send_err: Result<(), _> = err_tx.send(err);
         });
 
-    Ok((mempool, err_rx))
+    attempt.mark_ready();
+    Ok((mempool, err_rx, attempt))
 }
 
 /// Returns `Ok(None)` on clean shutdown, `Ok(Some(err))` if the sync task
@@ -1100,12 +1110,14 @@ async fn run_validator_mempool_task(
             async move {
                 // Important: bind the mempool sync handle. Otherwise it is
                 // dropped immediately
-                let (_mempool_sync, err_rx) = sync_mempool(
+                let readiness = validator.mempool_readiness.clone();
+                let (_mempool_sync, err_rx, _readiness_guard) = sync_mempool(
                     validator,
                     mainchain_client,
                     zmq_addr_sequence,
                     mempool_dat,
                     cancel.clone(),
+                    readiness,
                 )
                 .await
                 .map_err(AttemptError::Task)?;
@@ -1316,6 +1328,7 @@ async fn run_block_producer_mempool_task<BP>(
     zmq_addr_sequence: String,
     mempool_dat: Option<PathBuf>,
     cancel: CancellationToken,
+    readiness: MempoolReadiness,
 ) -> Result<(), miette::Report>
 where
     BP: CusfBlockProducer + Clone + Send + Sync + 'static,
@@ -1336,6 +1349,7 @@ where
         &cancel,
         error::MempoolTask::is_resyncable,
         || {
+            let readiness = readiness.clone();
             let producer = producer.clone();
             let mainchain_client = mainchain_client.clone();
             let zmq_addr_sequence = &zmq_addr_sequence;
@@ -1343,12 +1357,13 @@ where
             let gbt_server = &gbt_server;
             let cancel = cancel.clone();
             async move {
-                let (mempool, err_rx) = sync_mempool(
+                let (mempool, err_rx, _readiness_guard) = sync_mempool(
                     producer,
                     mainchain_client.clone(),
                     zmq_addr_sequence,
                     mempool_dat,
                     cancel.clone(),
+                    readiness,
                 )
                 .await
                 .map_err(AttemptError::Task)?;
@@ -1438,6 +1453,7 @@ async fn run_wallet_mempool_task(
         None
     };
 
+    let readiness = wallet.validator().mempool_readiness.clone();
     run_block_producer_mempool_task(
         wallet,
         gbt,
@@ -1445,6 +1461,7 @@ async fn run_wallet_mempool_task(
         zmq_addr_sequence,
         cli.node_blocks_dir_opts.mempool_dat.clone(),
         cancel,
+        readiness,
     )
     .await
 }
@@ -2129,6 +2146,7 @@ async fn main() -> Result<()> {
                 };
                 let mempool_dat = cli.node_blocks_dir_opts.mempool_dat.clone();
                 tasks.spawn(async move {
+                    let readiness = producer.validator().mempool_readiness.clone();
                     let res = run_block_producer_mempool_task(
                         producer,
                         gbt,
@@ -2136,6 +2154,7 @@ async fn main() -> Result<()> {
                         zmq,
                         mempool_dat,
                         cancel,
+                        readiness,
                     )
                     .await;
                     ("block producer mempool task", res)
@@ -2322,6 +2341,51 @@ mod tests {
         connect_service, gbt_rpc_middleware, resolve_block_file_network_magic,
         wait_for_error_or_shutdown, with_connect_middleware,
     };
+
+    #[tokio::test]
+    async fn repeated_recoverable_failures_exhaust_a_bounded_retry_budget() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let attempts = AtomicUsize::new(0);
+        let result = super::run_with_resync(
+            "test",
+            &CancellationToken::new(),
+            |_| true,
+            || {
+                attempts.fetch_add(1, Ordering::SeqCst);
+                async {
+                    Err(super::AttemptError::Task(std::io::Error::other(
+                        "transient",
+                    )))
+                }
+            },
+        )
+        .await;
+        assert_eq!(attempts.load(Ordering::SeqCst), 6);
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("5 consecutive re-syncs")
+        );
+    }
+
+    #[tokio::test]
+    async fn cancellation_prevents_another_resync() {
+        let cancel = CancellationToken::new();
+        cancel.cancel();
+        let result = super::run_with_resync(
+            "test",
+            &cancel,
+            |_| true,
+            || async {
+                Err(super::AttemptError::Task(std::io::Error::other(
+                    "transient",
+                )))
+            },
+        )
+        .await;
+        assert!(result.is_err());
+    }
 
     /// Panic with `boom` where a `T` is expected, so a handler can panic
     /// without a dead trailing value to satisfy its return type.
